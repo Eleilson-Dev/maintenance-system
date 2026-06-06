@@ -26,5 +26,3 @@ app.use("/maintenance", callRouter);
 app.use("/maintenance", reportRouter);
 
 app.use(HandleErrors.execute);
-
-const teste = "teste";
