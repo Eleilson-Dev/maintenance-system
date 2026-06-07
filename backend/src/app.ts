@@ -1,13 +1,12 @@
-import "express-async-errors";
 import "reflect-metadata";
 
 import express, { json } from "express";
 import cors from "cors";
 import helmet from "helmet";
 
-import { callRouter } from "./models/call/routes";
-import { userRouter } from "./models/user/routes";
-import { reportRouter } from "./models/report/routes";
+import { callRouter } from "./models/call/routes/index.js";
+import { userRouter } from "./models/user/routes/routes.js";
+import { reportRouter } from "./models/report/routes/index.js";
 
 import { HandleErrors } from "./shared/errors/HandleErrors.js";
 
