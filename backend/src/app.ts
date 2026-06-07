@@ -4,9 +4,9 @@ import express, { json } from "express";
 import cors from "cors";
 import helmet from "helmet";
 
-import { callRouter } from "./models/call/routes/index.js";
-import { userRouter } from "./models/user/routes/routes.js";
-import { reportRouter } from "./models/report/routes/index.js";
+import { callRouter } from "./models/call/routes/Call.routes.js";
+import { userRouter } from "./models/user/routes/User.routes.js";
+import { reportRouter } from "./models/report/routes/Report.routes.js";
 
 import { HandleErrors } from "./shared/errors/HandleErrors.js";
 
