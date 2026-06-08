@@ -2,20 +2,10 @@ import { injectable } from "tsyringe";
 import { prisma } from "../../../config/db/database.js";
 import bcrypt from "bcrypt";
 import { AppError } from "../../../shared/errors/AppError.js";
-import { TUserData } from "../schemas/user.schema.js";
+import { TUserData, TUserLoginResult } from "../schemas/user.schema.js";
 
 @injectable()
 export class UserService {
-  listAllUsers = async () => {
-    const response = await prisma.user.findMany({});
-
-    return response;
-  };
-
-  loginUser = async () => {
-    return;
-  };
-
   userRegister = async (userData: TUserData, encodedToken: any) => {
     try {
       const userCount = await prisma.user.count();
@@ -41,5 +31,15 @@ export class UserService {
       console.error(error);
       throw new AppError(400, "Erro ao criar novo user");
     }
+  };
+
+  userLogin = async (userLoginResult: TUserLoginResult) => {
+    return userLoginResult;
+  };
+
+  listAllUsers = async () => {
+    const response = await prisma.user.findMany({});
+
+    return response;
   };
 }

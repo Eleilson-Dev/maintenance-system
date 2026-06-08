@@ -14,4 +14,18 @@ export class UserController {
 
     return res.status(201).json(response);
   };
+
+  userLogin = async (req: Request, res: Response) => {
+    const response = await this.userService.userLogin(
+      res.locals.userLoginResult,
+    );
+
+    return res.status(200).json(response);
+  };
+
+  listAllUsers = async (req: Request, res: Response) => {
+    const response = await this.userService.listAllUsers();
+
+    return res.status(200).json(response);
+  };
 }

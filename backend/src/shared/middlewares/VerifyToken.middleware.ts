@@ -16,6 +16,17 @@ export class VerifyToken {
 
     encodedToken = jwt.verify(token, process.env.JWT_SECRET as string);
 
+    const { userId } = encodedToken;
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user) {
+      throw new AppError(
+        401,
+        "Your session is no longer valid. Please log in again.",
+      );
+    }
+
     try {
       res.locals.encodedToken = encodedToken;
       next();

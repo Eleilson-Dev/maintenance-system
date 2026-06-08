@@ -9,7 +9,7 @@ export class VerifyEmailExists {
     const response = await prisma.user.findFirst({ where: { email } });
 
     if (response) {
-      throw new AppError(409, "Email já existe!");
+      throw new AppError(409, "Email already exists!");
     }
 
     next();
