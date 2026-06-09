@@ -18,6 +18,21 @@ enum CallStatus {
   COMPLETED
 }
 
+enum CallPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum CallHistoryAction {
+  CREATED
+  ASSIGNED
+  STARTED
+  COMPLETED
+  REOPENED
+}
+
 model User {
   id       String   @id @default(uuid())
   name     String
@@ -25,34 +40,62 @@ model User {
   password String
   role     UserRole @default(TECHNICIAN)
 
-  callsAssigned Call[]
+  callsAssigned Call[] @relation("AssignedTechnician")
+  callsOpened   Call[] @relation("OpenedBy")
+
+  workLogs    WorkLog[]
+  hourBatches HourBatch[]
+  history     CallHistory[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model Sector {
+  id             String @id @default(uuid())
+  name           String @unique
+  normalizedName String @unique
+
+  calls Call[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Category {
   id   String @id @default(uuid())
   name String @unique
 
   calls Call[]
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Call {
-  id          String     @id @default(uuid())
+  id          String  @id @default(uuid())
   title       String
   description String?
-  status      CallStatus @default(OPEN)
+
+  status   CallStatus   @default(OPEN)
+  priority CallPriority @default(MEDIUM)
 
   sectorId String
   sector   Sector @relation(fields: [sectorId], references: [id])
 
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+  openedById String
+  openedBy   User   @relation("OpenedBy", fields: [openedById], references: [id])
+
   assignedToId String?
-  assignedTo   User?   @relation(fields: [assignedToId], references: [id])
+  assignedTo   User?   @relation("AssignedTechnician", fields: [assignedToId], references: [id])
 
   report Report?
+
+  workLogs WorkLog[]
+  history  CallHistory[]
 
   openedAt   DateTime  @default(now())
   finishedAt DateTime?
@@ -64,8 +107,6 @@ model Call {
 model Report {
   id String @id @default(uuid())
 
-  technicianName String
-
   serviceDone String
 
   partChanged Boolean @default(false)
@@ -74,11 +115,58 @@ model Report {
 
   observations String?
 
+  callId String @unique
+  call   Call   @relation(fields: [callId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WorkLog {
+  id String @id @default(uuid())
+
   startTime DateTime
   endTime   DateTime
 
-  callId String @unique
+  technicianId String
+  technician   User   @relation(fields: [technicianId], references: [id])
+
+  callId String
   call   Call   @relation(fields: [callId], references: [id])
+
+  batchId String?
+  batch   HourBatch? @relation(fields: [batchId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model HourBatch {
+  id String @id @default(uuid())
+
+  technicianId String
+  technician   User   @relation(fields: [technicianId], references: [id])
+
+  workLogs WorkLog[]
+
+  pdfPath String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CallHistory {
+  id String @id @default(uuid())
+
+  action CallHistoryAction
+
+  observation String?
+
+  callId String
+  call   Call   @relation(fields: [callId], references: [id])
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
   createdAt DateTime @default(now())
 }

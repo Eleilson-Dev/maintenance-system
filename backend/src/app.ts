@@ -7,6 +7,7 @@ import helmet from "helmet";
 import { callRouter } from "./models/call/routes/Call.routes.js";
 import { userRouter } from "./models/user/routes/User.routes.js";
 import { reportRouter } from "./models/report/routes/Report.routes.js";
+import { sectorRouter } from "./models/sector/routes/Sector.routes.js";
 
 import { HandleErrors } from "./shared/errors/HandleErrors.js";
 
@@ -21,6 +22,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/maintenance", userRouter);
+app.use("/maintenance", sectorRouter);
 app.use("/maintenance", callRouter);
 app.use("/maintenance", reportRouter);
 
