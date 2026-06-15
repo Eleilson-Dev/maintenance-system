@@ -12,23 +12,19 @@ export class VerifyToken {
       throw new AppError(401, "Token is required");
     }
 
-    let encodedToken: any;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
 
-    encodedToken = jwt.verify(token, process.env.JWT_SECRET as string);
-
-    const { userId } = encodedToken;
+    const { userId } = decoded;
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
 
     if (!user) {
-      throw new AppError(
-        401,
-        "Your session is no longer valid. Please log in again.",
-      );
+      throw new AppError(401, "Invalid session");
     }
 
     try {
-      res.locals.encodedToken = encodedToken;
+      res.locals.user = user;
+
       next();
     } catch (error: any) {
       const errorMap: Record<string, { status: number; message: string }> = {

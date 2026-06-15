@@ -29,6 +29,10 @@ userRouter.post(
   (req, res) => userController.userLogin(req, res),
 );
 
+userRouter.get("/user/me", VerifyToken.execute, (req, res) =>
+  userController.findUser(req, res),
+);
+
 userRouter.get(
   "/users/list",
   VerifyToken.execute,

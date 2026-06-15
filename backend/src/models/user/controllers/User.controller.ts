@@ -23,6 +23,12 @@ export class UserController {
     return res.status(200).json(response);
   };
 
+  findUser = async (req: Request, res: Response) => {
+    const response = await this.userService.findUser(res.locals.user.id);
+
+    return res.status(200).json(response);
+  };
+
   listAllUsers = async (req: Request, res: Response) => {
     const response = await this.userService.listAllUsers();
 

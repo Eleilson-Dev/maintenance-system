@@ -37,6 +37,17 @@ export class UserService {
     return userLoginResult;
   };
 
+  findUser = async (userId: string) => {
+    try {
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+
+      return user;
+    } catch (error) {
+      console.error(error);
+      throw new AppError(400, "Error while trying to find the user.");
+    }
+  };
+
   listAllUsers = async () => {
     const response = await prisma.user.findMany({});
 

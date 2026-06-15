@@ -22,20 +22,20 @@ export class VerifyLoginUser {
       }
     }
 
-    const acessToken = jwt.sign(
+    const token = jwt.sign(
       {
         userId: user.id,
         role: user.role,
       },
-      process.env.JWT_SECRET as string,
-      { expiresIn: "30d" },
+      process.env.JWT_SECRET!,
+      { expiresIn: "7d" },
     );
 
     res.locals.userLoginResult = {
       userId: user.id,
       userName: user.name,
       role: user.role,
-      acessToken,
+      token,
     };
 
     next();
