@@ -18,4 +18,16 @@ export class SectorService {
       throw new AppError(400, "Error creating new sector.");
     }
   };
+
+  getSectors = async () => {
+    try {
+      const allSectors = await prisma.sector.findMany();
+
+      return allSectors;
+    } catch (error) {
+      console.log(error);
+
+      throw new AppError(400, "Error searching all sectors.");
+    }
+  };
 }

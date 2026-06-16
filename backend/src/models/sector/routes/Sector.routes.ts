@@ -14,10 +14,17 @@ const sectorController = container.resolve(SectorController);
 export const sectorRouter = Router();
 
 sectorRouter.post(
-  "/sectors/register",
+  "/sector/register",
   VerifyToken.execute,
   VerifyAdmin.execute,
   ValidateBody.execute(sectorSchema),
   SectorAlreadyExists.execute,
   (req, res) => sectorController.sectorRegister(req, res),
+);
+
+sectorRouter.get(
+  "/sector/list",
+  VerifyToken.execute,
+  VerifyAdmin.execute,
+  (req, res) => sectorController.getSectors(req, res),
 );

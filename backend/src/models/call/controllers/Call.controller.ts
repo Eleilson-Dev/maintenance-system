@@ -1,0 +1,26 @@
+import type { Request, Response } from "express";
+import { inject, injectable } from "tsyringe";
+import { CallService } from "../services/Call.service.js";
+
+@injectable()
+export class CallController {
+  constructor(@inject("CallService") private callService: CallService) {}
+
+  createCall = async (req: Request, res: Response) => {
+    const userId = res.locals.user.id;
+    const newCall = await this.callService.createCall(userId, req.body);
+
+    return res.status(201).json(newCall);
+  };
+
+  getCalls = async (req: Request, res: Response) => {
+    const allCalls = await this.callService.getCalls();
+
+    return res.status(200).json(allCalls);
+  };
+
+  getCallById = async (req: Request, res: Response) => {};
+  assignTechnician = async (req: Request, res: Response) => {};
+  updateCallStatus = async (req: Request, res: Response) => {};
+  completeCall = async (req: Request, res: Response) => {};
+}

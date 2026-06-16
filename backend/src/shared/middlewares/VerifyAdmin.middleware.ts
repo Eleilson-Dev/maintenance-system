@@ -4,8 +4,8 @@ import { AppError } from "../errors/AppError.js";
 
 export class VerifyAdmin {
   static async execute(req: Request, res: Response, next: NextFunction) {
-    const { userId } = res.locals.encodedToken;
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const { id } = res.locals.user;
+    const user = await prisma.user.findUnique({ where: { id } });
 
     if (!user) {
       throw new AppError(401, "No users logged in");

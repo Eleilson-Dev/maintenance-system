@@ -22,7 +22,14 @@ enum CallPriority {
   LOW
   MEDIUM
   HIGH
-  CRITICAL
+  URGENT
+}
+
+enum ServiceType {
+  CORRECTIVE
+  PREVENTIVE
+  PREDICTIVE
+  INSTALLATION
 }
 
 enum CallHistoryAction {
@@ -78,8 +85,9 @@ model Call {
   title       String
   description String?
 
-  status   CallStatus   @default(OPEN)
-  priority CallPriority @default(MEDIUM)
+  status      CallStatus   @default(OPEN)
+  priority    CallPriority @default(MEDIUM)
+  serviceType ServiceType
 
   sectorId String
   sector   Sector @relation(fields: [sectorId], references: [id])

@@ -11,4 +11,10 @@ export class SectorController {
 
     return res.status(201).json(response);
   };
+
+  getSectors = async (req: Request, res: Response) => {
+    const response = await this.sectorService.getSectors();
+
+    return res.status(200).json(response);
+  };
 }
