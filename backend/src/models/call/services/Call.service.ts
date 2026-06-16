@@ -1,7 +1,6 @@
 import { injectable } from "tsyringe";
 import { prisma } from "../../../config/db/database.js";
 import { AppError } from "../../../shared/errors/AppError.js";
-import { normalizeText } from "../../../shared/utils/normalizeText.js";
 import { CreateCallDTO } from "../schemas/Call.schema.js";
 
 @injectable()
@@ -29,7 +28,10 @@ export class CallService {
 
   getCalls = async () => {
     try {
-      const allCalls = await prisma.call.findMany();
+      const allCalls = await prisma.call.findMany({
+        include: { sector: true, openedBy: true, assignedTo: true },
+        orderBy: { createdAt: "desc" },
+      });
 
       return allCalls;
     } catch (error) {

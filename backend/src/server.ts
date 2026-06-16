@@ -14,6 +14,11 @@ export const io = new Server(server, {
 io.on("connection", (socket) => {
   console.log(`Cliente conectado: ${socket.id}`);
 
+  socket.on("join_support", () => {
+    socket.join("support_agents");
+    console.log("Entrou na sala support_agents");
+  });
+
   socket.on("disconnect", () => {
     console.log(`Cliente desconectado: ${socket.id}`);
   });

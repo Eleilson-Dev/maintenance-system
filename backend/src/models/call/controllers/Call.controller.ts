@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { inject, injectable } from "tsyringe";
 import { CallService } from "../services/Call.service.js";
+import { io } from "../../../server.js";
 
 @injectable()
 export class CallController {
@@ -9,6 +10,8 @@ export class CallController {
   createCall = async (req: Request, res: Response) => {
     const userId = res.locals.user.id;
     const newCall = await this.callService.createCall(userId, req.body);
+
+    io.emit("call_created", newCall);
 
     return res.status(201).json(newCall);
   };
