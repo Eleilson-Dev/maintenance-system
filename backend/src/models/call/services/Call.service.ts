@@ -16,6 +16,11 @@ export class CallService {
           sectorId: callData.sectorId,
           openedById: userId,
         },
+        include: {
+          sector: true,
+          openedBy: true,
+          assignedTo: true,
+        },
       });
 
       return newCall;
