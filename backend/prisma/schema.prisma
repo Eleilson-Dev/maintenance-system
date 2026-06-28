@@ -78,109 +78,90 @@ enum AttachmentType {
   OTHER
 }
 
+enum NotificationType {
+  NEW_CALL
+  CALL_ASSIGNED
+  CALL_TRANSFERRED
+  HELP_REQUEST
+  HELP_APPROVED
+  HELP_REJECTED
+  WAITING_PARTS
+  COMMENT
+  CALL_COMPLETED
+  CALL_REOPENED
+  PRIORITY_CHANGED
+  SYSTEM
+}
+
 model User {
-  id       String @id @default(uuid())
-  name     String
-  email    String @unique
-  password String
-
-  role UserRole @default(TECHNICIAN)
-
-  level TechnicianLevel @default(JUNIOR)
-
-  assignedCalls Call[] @relation("AssignedTechnician")
-
-  openedCalls Call[] @relation("OpenedBy")
-
-  workLogs WorkLog[]
-
-  hourBatches HourBatch[]
-
-  history CallHistory[]
-
-  skills TechnicianSkill[]
-
-  assistantCalls CallAssistant[] @relation("AssistantTechnician")
-
-  addedAssistants CallAssistant[] @relation("AssistantAddedBy")
-
-  helpRequestsCreated HelpRequest[] @relation("HelpRequestedBy")
-
-  helpRequestsReceived HelpRequest[] @relation("HelpRequestedTechnician")
-
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  callAttachments CallAttachment[]
-  reports         Report[]
+  id                   String            @id @default(uuid())
+  name                 String
+  email                String            @unique
+  password             String
+  role                 UserRole          @default(TECHNICIAN)
+  level                TechnicianLevel   @default(JUNIOR)
+  assignedCalls        Call[]            @relation("AssignedTechnician")
+  openedCalls          Call[]            @relation("OpenedBy")
+  workLogs             WorkLog[]
+  hourBatches          HourBatch[]
+  history              CallHistory[]
+  skills               TechnicianSkill[]
+  assistantCalls       CallAssistant[]   @relation("AssistantTechnician")
+  addedAssistants      CallAssistant[]   @relation("AssistantAddedBy")
+  helpRequestsCreated  HelpRequest[]     @relation("HelpRequestedBy")
+  helpRequestsReceived HelpRequest[]     @relation("HelpRequestedTechnician")
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  callAttachments      CallAttachment[]
+  reports              Report[]
+  notifications        Notification[]
 
   @@index([role])
   @@index([level])
 }
 
 model Location {
-  id String @id @default(uuid())
-
-  name String
-
+  id             String     @id @default(uuid())
+  name           String
   normalizedName String
-
-  locationCode String @unique
-
-  parentId String?
-
-  parent Location? @relation("LocationTree", fields: [parentId], references: [id])
-
-  children Location[] @relation("LocationTree")
-
-  calls Call[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  locationCode   String     @unique
+  parentId       String?
+  parent         Location?  @relation("LocationTree", fields: [parentId], references: [id])
+  children       Location[] @relation("LocationTree")
+  calls          Call[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 
   @@index([parentId])
   @@index([normalizedName])
 }
 
 model Category {
-  id String @id @default(uuid())
-
-  name String @unique
-
-  normalizedName String @unique
-
-  calls Call[]
-
-  skills CategorySkill[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String          @id @default(uuid())
+  name           String          @unique
+  normalizedName String          @unique
+  calls          Call[]
+  skills         CategorySkill[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 }
 
 model Skill {
-  id String @id @default(uuid())
-
-  name String @unique
-
+  id          String            @id @default(uuid())
+  name        String            @unique
   technicians TechnicianSkill[]
-
-  calls CallSkill[]
-
-  categories CategorySkill[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  calls       CallSkill[]
+  categories  CategorySkill[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 }
 
 model TechnicianSkill {
-  id String @id @default(uuid())
-
+  id           String @id @default(uuid())
   technicianId String
-
-  technician User @relation(fields: [technicianId], references: [id])
-
-  skillId String
-
-  skill Skill @relation(fields: [skillId], references: [id])
+  technician   User   @relation(fields: [technicianId], references: [id])
+  skillId      String
+  skill        Skill  @relation(fields: [skillId], references: [id])
 
   @@unique([technicianId, skillId])
   @@index([technicianId])
@@ -188,15 +169,11 @@ model TechnicianSkill {
 }
 
 model CategorySkill {
-  id String @id @default(uuid())
-
+  id         String   @id @default(uuid())
   categoryId String
-
-  category Category @relation(fields: [categoryId], references: [id])
-
-  skillId String
-
-  skill Skill @relation(fields: [skillId], references: [id])
+  category   Category @relation(fields: [categoryId], references: [id])
+  skillId    String
+  skill      Skill    @relation(fields: [skillId], references: [id])
 
   @@unique([categoryId, skillId])
   @@index([categoryId])
@@ -204,73 +181,46 @@ model CategorySkill {
 }
 
 model Requester {
-  id String @id @default(uuid())
-
-  name String
-
-  phone String?
-
+  id           String   @id @default(uuid())
+  name         String
+  phone        String?
   locationText String?
-
-  calls Call[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  calls        Call[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model Call {
-  id String @id @default(uuid())
-
-  protocol String @unique()
-
-  title String
-
-  description String?
-
+  id            String           @id @default(uuid())
+  protocol      String           @unique()
+  title         String
+  description   String?
   requiredLevel TechnicianLevel
-
-  status CallStatus @default(OPEN)
-
-  priority CallPriority @default(MEDIUM)
-
-  serviceType ServiceType
-
-  locationId String
-  location   Location @relation(fields: [locationId], references: [id])
-
-  categoryId String?
-  category   Category? @relation(fields: [categoryId], references: [id])
-
-  requesterId String?
-  requester   Requester? @relation(fields: [requesterId], references: [id])
-
-  openedById String
-  openedBy   User   @relation("OpenedBy", fields: [openedById], references: [id])
-
-  assignedToId String?
-  assignedTo   User?   @relation("AssignedTechnician", fields: [assignedToId], references: [id])
-
-  report Report?
-
-  workLogs WorkLog[]
-
-  history CallHistory[]
-
-  skills CallSkill[]
-
-  assistants CallAssistant[]
-
-  helpRequests HelpRequest[]
-
-  attachments CallAttachment[]
-
-  openedAt DateTime @default(now())
-
-  finishedAt DateTime?
-
-  createdAt DateTime @default(now())
-
-  updatedAt DateTime @updatedAt
+  status        CallStatus       @default(OPEN)
+  priority      CallPriority     @default(MEDIUM)
+  serviceType   ServiceType
+  locationId    String
+  location      Location         @relation(fields: [locationId], references: [id])
+  categoryId    String?
+  category      Category?        @relation(fields: [categoryId], references: [id])
+  requesterId   String?
+  requester     Requester?       @relation(fields: [requesterId], references: [id])
+  openedById    String
+  openedBy      User             @relation("OpenedBy", fields: [openedById], references: [id])
+  assignedToId  String?
+  assignedTo    User?            @relation("AssignedTechnician", fields: [assignedToId], references: [id])
+  report        Report?
+  workLogs      WorkLog[]
+  history       CallHistory[]
+  skills        CallSkill[]
+  assistants    CallAssistant[]
+  helpRequests  HelpRequest[]
+  attachments   CallAttachment[]
+  notifications Notification[]
+  openedAt      DateTime         @default(now())
+  finishedAt    DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 
   @@index([status])
   @@index([priority])
@@ -454,4 +404,29 @@ model CallHistory {
   @@index([callId])
   @@index([userId])
   @@index([action])
+}
+
+model Notification {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  callId String?
+  call   Call?   @relation(fields: [callId], references: [id])
+
+  type NotificationType
+
+  title String
+
+  message String
+
+  read Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([callId])
+  @@index([read])
+  @@index([type])
 }
