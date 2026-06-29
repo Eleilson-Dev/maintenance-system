@@ -10,6 +10,7 @@ import { reportRouter } from "./models/report/routes/Report.routes.js";
 import { sectorRouter } from "./models/sector/routes/Sector.routes.js";
 
 import { HandleErrors } from "./shared/errors/HandleErrors.js";
+import { AreaRouter } from "./models/area/routes/Area.routes.js";
 
 export const app = express();
 
@@ -22,6 +23,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/maintenance", userRouter);
+app.use("/maintenance", AreaRouter);
 app.use("/maintenance", sectorRouter);
 app.use("/maintenance", callRouter);
 app.use("/maintenance", reportRouter);

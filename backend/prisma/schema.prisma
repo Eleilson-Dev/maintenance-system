@@ -94,27 +94,27 @@ enum NotificationType {
 }
 
 model User {
-  id                   String            @id @default(uuid())
+  id                   String           @id @default(uuid())
   name                 String
-  email                String            @unique
+  email                String           @unique
   password             String
-  role                 UserRole          @default(TECHNICIAN)
-  level                TechnicianLevel   @default(JUNIOR)
-  assignedCalls        Call[]            @relation("AssignedTechnician")
-  openedCalls          Call[]            @relation("OpenedBy")
+  role                 UserRole         @default(TECHNICIAN)
+  level                TechnicianLevel  @default(JUNIOR)
+  assignedCalls        Call[]           @relation("AssignedTechnician")
+  openedCalls          Call[]           @relation("OpenedBy")
   workLogs             WorkLog[]
   hourBatches          HourBatch[]
   history              CallHistory[]
-  skills               TechnicianSkill[]
-  assistantCalls       CallAssistant[]   @relation("AssistantTechnician")
-  addedAssistants      CallAssistant[]   @relation("AssistantAddedBy")
-  helpRequestsCreated  HelpRequest[]     @relation("HelpRequestedBy")
-  helpRequestsReceived HelpRequest[]     @relation("HelpRequestedTechnician")
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
+  assistantCalls       CallAssistant[]  @relation("AssistantTechnician")
+  addedAssistants      CallAssistant[]  @relation("AssistantAddedBy")
+  helpRequestsCreated  HelpRequest[]    @relation("HelpRequestedBy")
+  helpRequestsReceived HelpRequest[]    @relation("HelpRequestedTechnician")
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
   callAttachments      CallAttachment[]
   reports              Report[]
   notifications        Notification[]
+  userAreas            UserArea[]
 
   @@index([role])
   @@index([level])
@@ -134,50 +134,6 @@ model Location {
 
   @@index([parentId])
   @@index([normalizedName])
-}
-
-model Category {
-  id             String          @id @default(uuid())
-  name           String          @unique
-  normalizedName String          @unique
-  calls          Call[]
-  skills         CategorySkill[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-}
-
-model Skill {
-  id          String            @id @default(uuid())
-  name        String            @unique
-  technicians TechnicianSkill[]
-  calls       CallSkill[]
-  categories  CategorySkill[]
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-}
-
-model TechnicianSkill {
-  id           String @id @default(uuid())
-  technicianId String
-  technician   User   @relation(fields: [technicianId], references: [id])
-  skillId      String
-  skill        Skill  @relation(fields: [skillId], references: [id])
-
-  @@unique([technicianId, skillId])
-  @@index([technicianId])
-  @@index([skillId])
-}
-
-model CategorySkill {
-  id         String   @id @default(uuid())
-  categoryId String
-  category   Category @relation(fields: [categoryId], references: [id])
-  skillId    String
-  skill      Skill    @relation(fields: [skillId], references: [id])
-
-  @@unique([categoryId, skillId])
-  @@index([categoryId])
-  @@index([skillId])
 }
 
 model Requester {
@@ -201,8 +157,6 @@ model Call {
   serviceType   ServiceType
   locationId    String
   location      Location         @relation(fields: [locationId], references: [id])
-  categoryId    String?
-  category      Category?        @relation(fields: [categoryId], references: [id])
   requesterId   String?
   requester     Requester?       @relation(fields: [requesterId], references: [id])
   openedById    String
@@ -212,40 +166,49 @@ model Call {
   report        Report?
   workLogs      WorkLog[]
   history       CallHistory[]
-  skills        CallSkill[]
   assistants    CallAssistant[]
   helpRequests  HelpRequest[]
   attachments   CallAttachment[]
   notifications Notification[]
+  area          Area             @relation(fields: [areaId], references: [id])
+  areaId        String
   openedAt      DateTime         @default(now())
   finishedAt    DateTime?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
+  @@index([areaId])
   @@index([status])
   @@index([priority])
   @@index([assignedToId])
   @@index([openedById])
   @@index([locationId])
-  @@index([categoryId])
   @@index([requesterId])
   @@index([requiredLevel])
 }
 
-model CallSkill {
-  id String @id @default(uuid())
+model Area {
+  id             String     @id @default(uuid())
+  name           String     @unique
+  normalizedName String
+  users          UserArea[]
+  calls          Call[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 
-  callId String
+  @@index([normalizedName])
+}
 
-  call Call @relation(fields: [callId], references: [id])
+model UserArea {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  areaId String
+  area   Area   @relation(fields: [areaId], references: [id], onDelete: Cascade)
 
-  skillId String
-
-  skill Skill @relation(fields: [skillId], references: [id])
-
-  @@unique([callId, skillId])
-  @@index([callId])
-  @@index([skillId])
+  @@unique([userId, areaId])
+  @@index([userId])
+  @@index([areaId])
 }
 
 model CallAssistant {
@@ -271,27 +234,17 @@ model CallAssistant {
 }
 
 model HelpRequest {
-  id String @id @default(uuid())
-
-  callId String
-
-  call Call @relation(fields: [callId], references: [id])
-
+  id            String            @id @default(uuid())
+  callId        String
+  call          Call              @relation(fields: [callId], references: [id])
   requestedById String
-
-  requestedBy User @relation("HelpRequestedBy", fields: [requestedById], references: [id])
-
-  technicianId String
-
-  technician User @relation("HelpRequestedTechnician", fields: [technicianId], references: [id])
-
-  status HelpRequestStatus @default(PENDING)
-
-  message String?
-
-  createdAt DateTime @default(now())
-
-  updatedAt DateTime @updatedAt
+  requestedBy   User              @relation("HelpRequestedBy", fields: [requestedById], references: [id])
+  technicianId  String
+  technician    User              @relation("HelpRequestedTechnician", fields: [technicianId], references: [id])
+  status        HelpRequestStatus @default(PENDING)
+  message       String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 
   @@index([callId])
   @@index([requestedById])
@@ -300,23 +253,15 @@ model HelpRequest {
 }
 
 model CallAttachment {
-  id String @id @default(uuid())
-
-  callId String
-
-  call Call @relation(fields: [callId], references: [id])
-
+  id           String         @id @default(uuid())
+  callId       String
+  call         Call           @relation(fields: [callId], references: [id])
   uploadedById String
-
-  uploadedBy User @relation(fields: [uploadedById], references: [id])
-
-  fileName String
-
-  fileUrl String
-
-  type AttachmentType
-
-  createdAt DateTime @default(now())
+  uploadedBy   User           @relation(fields: [uploadedById], references: [id])
+  fileName     String
+  fileUrl      String
+  type         AttachmentType
+  createdAt    DateTime       @default(now())
 
   @@index([callId])
   @@index([uploadedById])
@@ -324,46 +269,33 @@ model CallAttachment {
 }
 
 model Report {
-  id String @id @default(uuid())
-
-  callId String @unique
-  call   Call   @relation(fields: [callId], references: [id])
-
-  serviceDone String
-
-  partChanged Boolean @default(false)
-
-  partName String?
-
+  id           String   @id @default(uuid())
+  callId       String   @unique
+  call         Call     @relation(fields: [callId], references: [id])
+  serviceDone  String
+  partChanged  Boolean  @default(false)
+  partName     String?
   observations String?
-
-  createdById String
-  createdBy   User   @relation(fields: [createdById], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdById  String
+  createdBy    User     @relation(fields: [createdById], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([createdById])
 }
 
 model WorkLog {
-  id String @id @default(uuid())
-
-  callId String
-  call   Call   @relation(fields: [callId], references: [id])
-
+  id           String     @id @default(uuid())
+  callId       String
+  call         Call       @relation(fields: [callId], references: [id])
   technicianId String
-  technician   User   @relation(fields: [technicianId], references: [id])
-
-  startTime DateTime
-
-  endTime DateTime?
-
-  batchId String?
-  batch   HourBatch? @relation(fields: [batchId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  technician   User       @relation(fields: [technicianId], references: [id])
+  startTime    DateTime
+  endTime      DateTime?
+  batchId      String?
+  batch        HourBatch? @relation(fields: [batchId], references: [id])
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   @@index([callId])
   @@index([technicianId])
@@ -371,35 +303,26 @@ model WorkLog {
 }
 
 model HourBatch {
-  id String @id @default(uuid())
-
+  id           String    @id @default(uuid())
   technicianId String
-  technician   User   @relation(fields: [technicianId], references: [id])
-
-  workLogs WorkLog[]
-
-  pdfPath String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  technician   User      @relation(fields: [technicianId], references: [id])
+  workLogs     WorkLog[]
+  pdfPath      String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([technicianId])
 }
 
 model CallHistory {
-  id String @id @default(uuid())
-
-  action CallHistoryAction
-
+  id          String            @id @default(uuid())
+  action      CallHistoryAction
   observation String?
-
-  callId String
-  call   Call   @relation(fields: [callId], references: [id])
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
-
-  createdAt DateTime @default(now())
+  callId      String
+  call        Call              @relation(fields: [callId], references: [id])
+  userId      String
+  user        User              @relation(fields: [userId], references: [id])
+  createdAt   DateTime          @default(now())
 
   @@index([callId])
   @@index([userId])
@@ -407,23 +330,16 @@ model CallHistory {
 }
 
 model Notification {
-  id String @id @default(uuid())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
-
-  callId String?
-  call   Call?   @relation(fields: [callId], references: [id])
-
-  type NotificationType
-
-  title String
-
-  message String
-
-  read Boolean @default(false)
-
-  createdAt DateTime @default(now())
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id])
+  callId    String?
+  call      Call?            @relation(fields: [callId], references: [id])
+  type      NotificationType
+  title     String
+  message   String
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
 
   @@index([userId])
   @@index([callId])

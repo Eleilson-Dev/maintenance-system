@@ -28,7 +28,7 @@ export class VerifyLoginUser {
         role: user.role,
       },
       process.env.JWT_SECRET!,
-      { expiresIn: "7d" },
+      { expiresIn: "30d" },
     );
 
     res.locals.userLoginResult = {

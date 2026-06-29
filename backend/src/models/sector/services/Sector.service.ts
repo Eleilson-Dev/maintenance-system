@@ -31,3 +31,5 @@ export class SectorService {
     }
   };
 }
+
+// tranformar sector em location

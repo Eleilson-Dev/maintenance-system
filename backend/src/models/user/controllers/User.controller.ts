@@ -7,10 +7,7 @@ export class UserController {
   constructor(@inject("UserService") private userService: UserService) {}
 
   userRegister = async (req: Request, res: Response) => {
-    const response = await this.userService.userRegister(
-      req.body,
-      res.locals.encodedToken,
-    );
+    const response = await this.userService.userRegister(req.body);
 
     return res.status(201).json(response);
   };

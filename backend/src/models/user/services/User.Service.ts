@@ -6,7 +6,7 @@ import { TUserData, TUserLoginResult } from "../schemas/User.schema.js";
 
 @injectable()
 export class UserService {
-  userRegister = async (userData: TUserData, encodedToken: any) => {
+  userRegister = async (userData: TUserData) => {
     try {
       const userCount = await prisma.user.count();
 
