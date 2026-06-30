@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { UserRole } from "../../../../generated/prisma/enums.js";
+import { TechnicianLevel } from "../../../../generated/prisma/enums.js";
 
 export const userSchema = z.object({
   name: z.string().min(3, "Nome deve ter pelo menos 3 caracteres"),
@@ -13,6 +14,16 @@ export const userSchema = z.object({
     }),
   role: z.enum([UserRole.ADMIN, UserRole.TECHNICIAN]).optional(),
 });
+
+export const updateTechnicalLevelSchema = z.object({
+  technicalLevel: z.nativeEnum(TechnicianLevel),
+});
+
+export const AddUserAreaSchema = z.object({
+  areaId: z.string().uuid("Área inválida."),
+});
+
+export type TAddUserArea = z.infer<typeof AddUserAreaSchema>;
 
 export const userLoginSchema = userSchema.pick({
   email: true,

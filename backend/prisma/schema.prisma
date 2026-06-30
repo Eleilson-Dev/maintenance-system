@@ -137,13 +137,12 @@ model Location {
 }
 
 model Requester {
-  id           String   @id @default(uuid())
-  name         String
-  phone        String?
-  locationText String?
-  calls        Call[]
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id        String   @id @default(uuid())
+  name      String
+  phone     String?
+  calls     Call[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Call {
@@ -170,14 +169,12 @@ model Call {
   helpRequests  HelpRequest[]
   attachments   CallAttachment[]
   notifications Notification[]
-  area          Area             @relation(fields: [areaId], references: [id])
-  areaId        String
+  callAreas     CallArea[]
   openedAt      DateTime         @default(now())
   finishedAt    DateTime?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
-  @@index([areaId])
   @@index([status])
   @@index([priority])
   @@index([assignedToId])
@@ -192,11 +189,23 @@ model Area {
   name           String     @unique
   normalizedName String
   users          UserArea[]
-  calls          Call[]
+  callAreas      CallArea[]
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
   @@index([normalizedName])
+}
+
+model CallArea {
+  id     String @id @default(uuid())
+  callId String
+  call   Call   @relation(fields: [callId], references: [id], onDelete: Cascade)
+  areaId String
+  area   Area   @relation(fields: [areaId], references: [id], onDelete: Cascade)
+
+  @@unique([callId, areaId])
+  @@index([callId])
+  @@index([areaId])
 }
 
 model UserArea {
@@ -212,21 +221,14 @@ model UserArea {
 }
 
 model CallAssistant {
-  id String @id @default(uuid())
-
-  callId String
-
-  call Call @relation(fields: [callId], references: [id])
-
+  id           String   @id @default(uuid())
+  callId       String
+  call         Call     @relation(fields: [callId], references: [id])
   technicianId String
-
-  technician User @relation("AssistantTechnician", fields: [technicianId], references: [id])
-
-  addedById String
-
-  addedBy User @relation("AssistantAddedBy", fields: [addedById], references: [id])
-
-  createdAt DateTime @default(now())
+  technician   User     @relation("AssistantTechnician", fields: [technicianId], references: [id])
+  addedById    String
+  addedBy      User     @relation("AssistantAddedBy", fields: [addedById], references: [id])
+  createdAt    DateTime @default(now())
 
   @@unique([callId, technicianId])
   @@index([callId])

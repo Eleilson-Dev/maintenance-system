@@ -4,7 +4,12 @@ import { container } from "tsyringe";
 import { UserController } from "../controllers/User.controller.js";
 import { UserService } from "../services/User.Service.js";
 import { ValidateBody } from "../../../shared/middlewares/ValidateBody.middleware.js";
-import { userLoginSchema, userSchema } from "../schemas/User.schema.js";
+import {
+  AddUserAreaSchema,
+  updateTechnicalLevelSchema,
+  userLoginSchema,
+  userSchema,
+} from "../schemas/User.schema.js";
 import { VerifyEmailExists } from "../middlewares/VerifyEmailExists.middleware.js";
 import { VerifyLoginUser } from "../middlewares/VerifyLoginUser.middleware.js";
 import { VerifyToken } from "../../../shared/middlewares/VerifyToken.middleware.js";
@@ -38,4 +43,20 @@ userRouter.get(
   VerifyToken.execute,
   VerifyAdmin.execute,
   (req, res) => userController.listAllUsers(req, res),
+);
+
+userRouter.patch(
+  "/user/:userId/areas",
+  VerifyToken.execute,
+  VerifyAdmin.execute,
+  ValidateBody.execute(AddUserAreaSchema),
+  (req, res) => userController.addAreaToUser(req, res),
+);
+
+userRouter.patch(
+  "/user/:userId/technical-level",
+  VerifyToken.execute,
+  VerifyAdmin.execute,
+  ValidateBody.execute(updateTechnicalLevelSchema),
+  (req, res) => userController.updateTechnicalLevel(req, res),
 );
