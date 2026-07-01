@@ -21,9 +21,9 @@ enum ServiceType {
 
 enum TechnicianLevel {
   JUNIOR
-  PLENO
+  MID
   SENIOR
-  ESPECIALISTA
+  SPECIALIST
 }
 
 enum CallStatus {

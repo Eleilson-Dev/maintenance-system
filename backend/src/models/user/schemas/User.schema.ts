@@ -1,6 +1,8 @@
 import { z } from "zod";
-import { UserRole } from "../../../../generated/prisma/enums.js";
-import { TechnicianLevel } from "../../../../generated/prisma/enums.js";
+import {
+  UserRole,
+  TechnicianLevel,
+} from "../../../../generated/prisma/enums.js";
 
 export const userSchema = z.object({
   name: z.string().min(3, "Nome deve ter pelo menos 3 caracteres"),
@@ -13,6 +15,15 @@ export const userSchema = z.object({
       message: "Senha não pode conter espaços",
     }),
   role: z.enum([UserRole.ADMIN, UserRole.TECHNICIAN]).optional(),
+  level: z
+    .enum([
+      TechnicianLevel.JUNIOR,
+      TechnicianLevel.MID,
+      TechnicianLevel.SENIOR,
+      TechnicianLevel.SPECIALIST,
+    ])
+    .optional(),
+  areaIds: z.array(z.string().uuid("ID da área inválido")).optional(),
 });
 
 export const updateTechnicalLevelSchema = z.object({

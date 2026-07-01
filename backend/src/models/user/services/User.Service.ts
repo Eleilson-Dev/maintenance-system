@@ -9,25 +9,43 @@ import { TechnicianLevel } from "../../../../generated/prisma/enums.js";
 export class UserService {
   userRegister = async (userData: TUserData) => {
     try {
-      const userCount = await prisma.user.count();
+      return await prisma.$transaction(async (tx) => {
+        const hashedPassword = await bcrypt.hash(userData.password, 10);
 
-      const hashedPassword = await bcrypt.hash(userData.password, 10);
+        const newUser = await tx.user.create({
+          data: {
+            name: userData.name,
+            email: userData.email.toLowerCase(),
+            password: hashedPassword,
+            role: userData.role,
+            level: userData.level,
+          },
+          omit: { password: true },
+        });
 
-      const roleToUse =
-        userCount === 0 ? "ADMIN" : (userData.role ?? "TECHNICIAN");
+        if (userData.areaIds?.length) {
+          const areas = await tx.area.findMany({
+            where: {
+              id: {
+                in: userData.areaIds,
+              },
+            },
+          });
 
-      const newUser = await prisma.user.create({
-        data: {
-          name: userData.name,
-          password: hashedPassword,
-          email: userData.email.toLowerCase(),
-          role: roleToUse,
-        },
+          if (areas.length !== userData.areaIds.length) {
+            throw new AppError(404, "Uma ou mais áreas não foram encontradas.");
+          }
+
+          await tx.userArea.createMany({
+            data: userData.areaIds.map((areaId) => ({
+              userId: newUser.id,
+              areaId,
+            })),
+          });
+        }
+
+        return newUser;
       });
-
-      const { password, ...userWithoutPassword } = newUser;
-
-      return userWithoutPassword;
     } catch (error) {
       console.error(error);
       throw new AppError(400, "Error creating new user.");

@@ -5,7 +5,7 @@ CREATE TYPE "UserRole" AS ENUM ('ADMIN', 'TECHNICIAN');
 CREATE TYPE "ServiceType" AS ENUM ('CORRECTIVE', 'PREVENTIVE', 'PREDICTIVE', 'INSTALLATION');
 
 -- CreateEnum
-CREATE TYPE "TechnicianLevel" AS ENUM ('JUNIOR', 'PLENO', 'SENIOR', 'ESPECIALISTA');
+CREATE TYPE "TechnicianLevel" AS ENUM ('JUNIOR', 'MID', 'SENIOR', 'SPECIALIST');
 
 -- CreateEnum
 CREATE TYPE "CallStatus" AS ENUM ('WAITING_APPROVAL', 'OPEN', 'IN_PROGRESS', 'WAITING_PARTS', 'COMPLETED', 'REJECTED');
@@ -21,6 +21,9 @@ CREATE TYPE "HelpRequestStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
 
 -- CreateEnum
 CREATE TYPE "AttachmentType" AS ENUM ('BEFORE', 'AFTER', 'OTHER');
+
+-- CreateEnum
+CREATE TYPE "NotificationType" AS ENUM ('NEW_CALL', 'CALL_ASSIGNED', 'CALL_TRANSFERRED', 'HELP_REQUEST', 'HELP_APPROVED', 'HELP_REJECTED', 'WAITING_PARTS', 'COMMENT', 'CALL_COMPLETED', 'CALL_REOPENED', 'PRIORITY_CHANGED', 'SYSTEM');
 
 -- CreateTable
 CREATE TABLE "User" (
@@ -50,50 +53,10 @@ CREATE TABLE "Location" (
 );
 
 -- CreateTable
-CREATE TABLE "Category" (
-    "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "normalizedName" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "Category_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "Skill" (
-    "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "Skill_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "TechnicianSkill" (
-    "id" TEXT NOT NULL,
-    "technicianId" TEXT NOT NULL,
-    "skillId" TEXT NOT NULL,
-
-    CONSTRAINT "TechnicianSkill_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "CategorySkill" (
-    "id" TEXT NOT NULL,
-    "categoryId" TEXT NOT NULL,
-    "skillId" TEXT NOT NULL,
-
-    CONSTRAINT "CategorySkill_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "Requester" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "phone" TEXT,
-    "locationText" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -111,7 +74,6 @@ CREATE TABLE "Call" (
     "priority" "CallPriority" NOT NULL DEFAULT 'MEDIUM',
     "serviceType" "ServiceType" NOT NULL,
     "locationId" TEXT NOT NULL,
-    "categoryId" TEXT,
     "requesterId" TEXT,
     "openedById" TEXT NOT NULL,
     "assignedToId" TEXT,
@@ -124,12 +86,32 @@ CREATE TABLE "Call" (
 );
 
 -- CreateTable
-CREATE TABLE "CallSkill" (
+CREATE TABLE "Area" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "normalizedName" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Area_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "CallArea" (
     "id" TEXT NOT NULL,
     "callId" TEXT NOT NULL,
-    "skillId" TEXT NOT NULL,
+    "areaId" TEXT NOT NULL,
 
-    CONSTRAINT "CallSkill_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "CallArea_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "UserArea" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "areaId" TEXT NOT NULL,
+
+    CONSTRAINT "UserArea_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -222,6 +204,20 @@ CREATE TABLE "CallHistory" (
     CONSTRAINT "CallHistory_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "Notification" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "callId" TEXT,
+    "type" "NotificationType" NOT NULL,
+    "title" TEXT NOT NULL,
+    "message" TEXT NOT NULL,
+    "read" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Notification_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
@@ -239,33 +235,6 @@ CREATE INDEX "Location_parentId_idx" ON "Location"("parentId");
 
 -- CreateIndex
 CREATE INDEX "Location_normalizedName_idx" ON "Location"("normalizedName");
-
--- CreateIndex
-CREATE UNIQUE INDEX "Category_name_key" ON "Category"("name");
-
--- CreateIndex
-CREATE UNIQUE INDEX "Category_normalizedName_key" ON "Category"("normalizedName");
-
--- CreateIndex
-CREATE UNIQUE INDEX "Skill_name_key" ON "Skill"("name");
-
--- CreateIndex
-CREATE INDEX "TechnicianSkill_technicianId_idx" ON "TechnicianSkill"("technicianId");
-
--- CreateIndex
-CREATE INDEX "TechnicianSkill_skillId_idx" ON "TechnicianSkill"("skillId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "TechnicianSkill_technicianId_skillId_key" ON "TechnicianSkill"("technicianId", "skillId");
-
--- CreateIndex
-CREATE INDEX "CategorySkill_categoryId_idx" ON "CategorySkill"("categoryId");
-
--- CreateIndex
-CREATE INDEX "CategorySkill_skillId_idx" ON "CategorySkill"("skillId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "CategorySkill_categoryId_skillId_key" ON "CategorySkill"("categoryId", "skillId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Call_protocol_key" ON "Call"("protocol");
@@ -286,22 +255,34 @@ CREATE INDEX "Call_openedById_idx" ON "Call"("openedById");
 CREATE INDEX "Call_locationId_idx" ON "Call"("locationId");
 
 -- CreateIndex
-CREATE INDEX "Call_categoryId_idx" ON "Call"("categoryId");
-
--- CreateIndex
 CREATE INDEX "Call_requesterId_idx" ON "Call"("requesterId");
 
 -- CreateIndex
 CREATE INDEX "Call_requiredLevel_idx" ON "Call"("requiredLevel");
 
 -- CreateIndex
-CREATE INDEX "CallSkill_callId_idx" ON "CallSkill"("callId");
+CREATE UNIQUE INDEX "Area_name_key" ON "Area"("name");
 
 -- CreateIndex
-CREATE INDEX "CallSkill_skillId_idx" ON "CallSkill"("skillId");
+CREATE INDEX "Area_normalizedName_idx" ON "Area"("normalizedName");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "CallSkill_callId_skillId_key" ON "CallSkill"("callId", "skillId");
+CREATE INDEX "CallArea_callId_idx" ON "CallArea"("callId");
+
+-- CreateIndex
+CREATE INDEX "CallArea_areaId_idx" ON "CallArea"("areaId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "CallArea_callId_areaId_key" ON "CallArea"("callId", "areaId");
+
+-- CreateIndex
+CREATE INDEX "UserArea_userId_idx" ON "UserArea"("userId");
+
+-- CreateIndex
+CREATE INDEX "UserArea_areaId_idx" ON "UserArea"("areaId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "UserArea_userId_areaId_key" ON "UserArea"("userId", "areaId");
 
 -- CreateIndex
 CREATE INDEX "CallAssistant_callId_idx" ON "CallAssistant"("callId");
@@ -360,26 +341,23 @@ CREATE INDEX "CallHistory_userId_idx" ON "CallHistory"("userId");
 -- CreateIndex
 CREATE INDEX "CallHistory_action_idx" ON "CallHistory"("action");
 
+-- CreateIndex
+CREATE INDEX "Notification_userId_idx" ON "Notification"("userId");
+
+-- CreateIndex
+CREATE INDEX "Notification_callId_idx" ON "Notification"("callId");
+
+-- CreateIndex
+CREATE INDEX "Notification_read_idx" ON "Notification"("read");
+
+-- CreateIndex
+CREATE INDEX "Notification_type_idx" ON "Notification"("type");
+
 -- AddForeignKey
 ALTER TABLE "Location" ADD CONSTRAINT "Location_parentId_fkey" FOREIGN KEY ("parentId") REFERENCES "Location"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "TechnicianSkill" ADD CONSTRAINT "TechnicianSkill_technicianId_fkey" FOREIGN KEY ("technicianId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "TechnicianSkill" ADD CONSTRAINT "TechnicianSkill_skillId_fkey" FOREIGN KEY ("skillId") REFERENCES "Skill"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "CategorySkill" ADD CONSTRAINT "CategorySkill_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "CategorySkill" ADD CONSTRAINT "CategorySkill_skillId_fkey" FOREIGN KEY ("skillId") REFERENCES "Skill"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "Call" ADD CONSTRAINT "Call_locationId_fkey" FOREIGN KEY ("locationId") REFERENCES "Location"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Call" ADD CONSTRAINT "Call_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Call" ADD CONSTRAINT "Call_requesterId_fkey" FOREIGN KEY ("requesterId") REFERENCES "Requester"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -391,10 +369,16 @@ ALTER TABLE "Call" ADD CONSTRAINT "Call_openedById_fkey" FOREIGN KEY ("openedByI
 ALTER TABLE "Call" ADD CONSTRAINT "Call_assignedToId_fkey" FOREIGN KEY ("assignedToId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "CallSkill" ADD CONSTRAINT "CallSkill_callId_fkey" FOREIGN KEY ("callId") REFERENCES "Call"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "CallArea" ADD CONSTRAINT "CallArea_callId_fkey" FOREIGN KEY ("callId") REFERENCES "Call"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "CallSkill" ADD CONSTRAINT "CallSkill_skillId_fkey" FOREIGN KEY ("skillId") REFERENCES "Skill"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "CallArea" ADD CONSTRAINT "CallArea_areaId_fkey" FOREIGN KEY ("areaId") REFERENCES "Area"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "UserArea" ADD CONSTRAINT "UserArea_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "UserArea" ADD CONSTRAINT "UserArea_areaId_fkey" FOREIGN KEY ("areaId") REFERENCES "Area"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "CallAssistant" ADD CONSTRAINT "CallAssistant_callId_fkey" FOREIGN KEY ("callId") REFERENCES "Call"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -443,3 +427,9 @@ ALTER TABLE "CallHistory" ADD CONSTRAINT "CallHistory_callId_fkey" FOREIGN KEY (
 
 -- AddForeignKey
 ALTER TABLE "CallHistory" ADD CONSTRAINT "CallHistory_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Notification" ADD CONSTRAINT "Notification_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Notification" ADD CONSTRAINT "Notification_callId_fkey" FOREIGN KEY ("callId") REFERENCES "Call"("id") ON DELETE SET NULL ON UPDATE CASCADE;
