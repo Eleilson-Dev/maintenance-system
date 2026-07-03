@@ -7,12 +7,11 @@ import { io } from "../../../server.js";
 export class CallController {
   constructor(@inject("CallService") private callService: CallService) {}
 
-  createCall = async (req: Request, res: Response) => {
+  createAdminCall = async (req: Request, res: Response) => {
+    console.log(req.body);
     const userId = res.locals.user.id;
-    const newCall = await this.callService.createCall(userId, req.body);
-
-    io.emit("call_created", newCall);
-
+    const newCall = await this.callService.createAdminCall(userId, req.body);
+    // io.emit("call_created", newCall);
     return res.status(201).json(newCall);
   };
 

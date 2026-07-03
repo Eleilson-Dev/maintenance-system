@@ -5,7 +5,7 @@ import { CallController } from "../controllers/Call.controller.js";
 import { VerifyToken } from "../../../shared/middlewares/VerifyToken.middleware.js";
 import { VerifyAdmin } from "../../../shared/middlewares/VerifyAdmin.middleware.js";
 import { ValidateBody } from "../../../shared/middlewares/ValidateBody.middleware.js";
-import { createCallSchema } from "../schemas/Call.schema.js";
+import { createAdminCallSchema } from "../schemas/Call.schema.js";
 
 container.registerSingleton("CallService", CallService);
 const callController = container.resolve(CallController);
@@ -13,11 +13,11 @@ const callController = container.resolve(CallController);
 export const callRouter = Router();
 
 callRouter.post(
-  "/call/create",
+  "/call/admin/create",
   VerifyToken.execute,
   VerifyAdmin.execute,
-  ValidateBody.execute(createCallSchema),
-  (req, res) => callController.createCall(req, res),
+  ValidateBody.execute(createAdminCallSchema),
+  (req, res) => callController.createAdminCall(req, res),
 );
 
 callRouter.get("/call/list", VerifyToken.execute, (req, res) =>
