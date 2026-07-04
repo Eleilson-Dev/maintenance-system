@@ -7,6 +7,12 @@ import { io } from "../../../server.js";
 export class CallController {
   constructor(@inject("CallService") private callService: CallService) {}
 
+  previewCall = async (req: Request, res: Response) => {
+    const preview = await this.callService.previewCall(req.body);
+
+    return res.status(200).json(preview);
+  };
+
   createAdminCall = async (req: Request, res: Response) => {
     console.log(req.body);
     const userId = res.locals.user.id;

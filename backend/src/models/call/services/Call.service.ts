@@ -9,34 +9,96 @@ import {
 
 @injectable()
 export class CallService {
+  previewCall = async (callData: CreateCallDTO) => {
+    console.log("=======================================");
+    console.log("🔍 PREVIEW CALL");
+    console.log("=======================================");
+
+    // 1. cobertura (base do sistema)
+    const coverage = await this.validateCoverage(callData);
+
+    // se nem tem cobertura, já responde erro
+    if (!coverage.success) {
+      return {
+        success: false,
+        step: "coverage",
+        message: coverage.message,
+        missingAreas: coverage.missingAreas,
+      };
+    }
+
+    // 2. regras de atribuição
+    const rules = this.validateAssignmentRules(callData);
+
+    // 3. responsável (só simulação, não bloqueia ainda)
+    const responsible = await this.validateResponsible(callData);
+
+    // 4. decisão final do preview
+    const requiresResponsible = rules.requiresResponsible;
+
+    const requiresTeam =
+      rules.requiresTeam ||
+      (responsible?.success ? responsible.needsAssistants : false);
+
+    // 5. resposta final do preview
+    const result = {
+      success: true,
+      coverage: {
+        technicians: coverage.technicians.length,
+        coveredAreas: coverage.coveredAreas,
+      },
+      rules,
+      responsiblePreview: responsible?.success
+        ? {
+            user: responsible.user.name,
+            coveredAreas: responsible.coveredAreas,
+            missingAreas: responsible.missingAreas,
+          }
+        : null,
+      requiresResponsible,
+      requiresTeam,
+    };
+
+    console.log("📦 PREVIEW RESULT:", result);
+
+    return result;
+  };
+
   createAdminCall = async (userId: string, callData: CreateCallDTO) => {
     try {
       console.log("=======================================");
       console.log("🚀 Iniciando criação do chamado");
       console.log("=======================================");
 
-      // 1. Verifica se existe cobertura
+      // 1. Verifica cobertura
       const coverage = await this.validateCoverage(callData);
 
       if (!coverage.success) {
         console.log("❌ Cobertura insuficiente.");
-
         return coverage;
       }
 
       console.log("✅ Cobertura validada.");
-      console.log("👥 Técnicos encontrados:", coverage.technicians.length);
-      console.log("📍 Áreas cobertas:", coverage.coveredAreas);
 
-      // 2. Valida responsável
-      const responsible = await this.validateResponsible(callData);
+      // 2. Descobre quais regras esse chamado possui
+      const assignmentRules = this.validateAssignmentRules(callData);
 
-      console.log("👤 Resultado responsável:");
-      console.log(responsible);
+      // 3. Se o chamado exigir responsável, valida
+      if (assignmentRules.requiresResponsible) {
+        const responsible = await this.validateResponsible(callData);
 
-      // 3. validateAssignmentRules()
+        if (!responsible?.success) {
+          console.log("❌ Responsável inválido.");
+          return responsible;
+        }
 
-      // 4. resolveRequiredAssistants()
+        console.log("✅ Responsável validado.");
+        console.log("👤", responsible.user.name);
+        console.log("📍 Áreas cobertas:", responsible.coveredAreas);
+        console.log("❌ Áreas restantes:", responsible.missingAreas);
+
+        // 4. resolveRequiredAssistants()
+      }
 
       // 5. createCall()
     } catch (error) {
@@ -57,13 +119,16 @@ export class CallService {
     console.log("🚀 Iniciando validação de cobertura");
     console.log("=======================================");
 
-    console.log("📥 Áreas recebidas:", callData.areaIds);
-
+    // 1. Valida entrada
     if (!callData.areaIds.length) {
       throw new AppError(400, "At least one area must be informed.");
     }
 
-    const technicians = await prisma.user.findMany({
+    console.log("📥 Áreas do chamado:", callData.areaIds);
+    console.log("📊 Nível mínimo:", callData.requiredLevel);
+
+    // 2. Busca todos os técnicos que possuem pelo menos uma das áreas
+    const candidateTechnicians = await prisma.user.findMany({
       where: {
         userAreas: {
           some: {
@@ -78,48 +143,83 @@ export class CallService {
       },
     });
 
-    console.log("👥 Técnicos encontrados:", technicians.length);
+    console.log("👥 Técnicos candidatos:", candidateTechnicians.length);
 
-    technicians.forEach((tech) => {
-      console.log(
-        `👤 ${tech.name} cobre as áreas:`,
-        tech.userAreas.map((ua) => ua.areaId),
-      );
-    });
+    // 3. Mantém apenas técnicos com nível suficiente
+    const LEVEL_ORDER = {
+      JUNIOR: 1,
+      MID: 2,
+      SENIOR: 3,
+      SPECIALIST: 4,
+    } as const;
 
+    const eligibleTechnicians = candidateTechnicians.filter(
+      (technician) =>
+        LEVEL_ORDER[technician.level] >= LEVEL_ORDER[callData.requiredLevel],
+    );
+
+    console.log("✅ Técnicos elegíveis:", eligibleTechnicians.length);
+
+    // 4. Descobre quais áreas estão cobertas
     const coveredAreas = new Set<string>();
 
-    technicians.forEach((tech) => {
-      tech.userAreas.forEach((userArea) => {
+    eligibleTechnicians.forEach((technician) => {
+      console.log(
+        `👤 ${technician.name} (${technician.level}) ->`,
+        technician.userAreas.map((ua) => ua.areaId),
+      );
+
+      technician.userAreas.forEach((userArea) => {
         if (callData.areaIds.includes(userArea.areaId)) {
           coveredAreas.add(userArea.areaId);
         }
       });
     });
 
-    console.log("✅ Áreas cobertas:", [...coveredAreas]);
-
+    // 5. Descobre quais áreas ficaram descobertas
     const missingAreas = callData.areaIds.filter(
       (areaId) => !coveredAreas.has(areaId),
     );
 
+    console.log("✅ Áreas cobertas:", [...coveredAreas]);
     console.log("❌ Áreas sem cobertura:", missingAreas);
 
     if (missingAreas.length > 0) {
       return {
         success: false,
-        message: "Não existem técnicos para todas as áreas do chamado.",
+        message:
+          "Não existem técnicos com área e nível suficientes para atender todas as áreas do chamado.",
         missingAreas,
       };
     }
 
-    console.log("🎉 Todas as áreas possuem cobertura.");
+    console.log("🎉 Cobertura validada com sucesso.");
     console.log("=======================================");
 
     return {
       success: true,
-      technicians,
+      technicians: eligibleTechnicians,
       coveredAreas: [...coveredAreas],
+    };
+  };
+
+  private validateAssignmentRules = (callData: CreateCallDTO) => {
+    console.log("=======================================");
+    console.log("📋 Validando regras de atribuição");
+    console.log("=======================================");
+
+    const isMultiAreaCall = callData.areaIds.length > 1;
+
+    const requiresResponsible = isMultiAreaCall;
+    const requiresTeam = isMultiAreaCall;
+
+    console.log("📍 Áreas do chamado:", callData.areaIds.length);
+    console.log("👤 Responsável obrigatório:", requiresResponsible);
+    console.log("👥 Formação de equipe obrigatória:", requiresTeam);
+
+    return {
+      requiresResponsible,
+      requiresTeam,
     };
   };
 
