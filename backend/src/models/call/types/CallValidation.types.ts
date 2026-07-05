@@ -1,13 +1,21 @@
 import { Prisma } from "../../../../generated/prisma/client.js";
 
-type UserWithAreas = Prisma.UserGetPayload<{
-  include: { userAreas: true };
+type EligibleTechnician = Prisma.UserGetPayload<{
+  select: {
+    id: true;
+    name: true;
+    level: true;
+    userAreas: {
+      select: {
+        areaId: true;
+      };
+    };
+  };
 }>;
-
 export type CoverageValidationResult =
   | {
       success: true;
-      technicians: any[];
+      eligibleTechnicians: EligibleTechnician[];
       coveredAreas: string[];
     }
   | {
@@ -19,7 +27,7 @@ export type CoverageValidationResult =
 export type ResponsibleValidationResult =
   | {
       success: true;
-      user: UserWithAreas;
+      user: EligibleTechnician;
       coveredAreas: string[];
       missingAreas: string[];
       needsAssistants: boolean;
