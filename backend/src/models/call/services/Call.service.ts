@@ -2,8 +2,12 @@ import { injectable } from "tsyringe";
 import { prisma } from "../../../config/db/database.js";
 import { AppError } from "../../../shared/errors/AppError.js";
 import { CreateCallDTO } from "../schemas/Call.schema.js";
-import { CoverageValidationResult } from "../types/CallValidation.types.js";
+import {
+  AssignmentResult,
+  CoverageValidationResult,
+} from "../types/CallValidation.types.js";
 import { generateProtocol } from "../utils/generateProtocol.js";
+import { CallStatus, Prisma } from "../../../../generated/prisma/client.js";
 
 @injectable()
 export class CallService {
@@ -37,14 +41,12 @@ export class CallService {
     try {
       const assignment = await this.validateAssignment(callData);
 
-      const call = await prisma.$transaction(async (tx) => {
-        // TODO: Implementar geração do protocolo
-        const totalCalls = await tx.call.count();
+      const result = await prisma.$transaction(async (tx) => {
+        const status = await this.getInitialStatus(tx, assignment);
 
-        // 1. Cria o chamado
         const createdCall = await tx.call.create({
           data: {
-            protocol: generateProtocol(totalCalls + 1),
+            protocol: generateProtocol(),
             title: callData.title,
             description: callData.description,
             priority: callData.priority,
@@ -53,11 +55,18 @@ export class CallService {
             locationId: callData.locationId,
             openedById: userId,
             assignedToId: assignment.responsible?.id ?? null,
-            status: assignment.responsible ? "IN_PROGRESS" : "OPEN",
+            status,
           },
         });
 
-        // 2. Relaciona as áreas
+        // =====================================================
+        // 🔥 SIDE EFFECTS CENTRALIZADOS (MUDANÇA PRINCIPAL)
+        // =====================================================
+        const sideEffects = {
+          history: [] as any[],
+          notifications: [] as any[],
+        };
+
         await tx.callArea.createMany({
           data: callData.areaIds.map((areaId) => ({
             callId: createdCall.id,
@@ -65,7 +74,6 @@ export class CallService {
           })),
         });
 
-        // 3. Relaciona os auxiliares
         if (assignment.assistants.length > 0) {
           await tx.callAssistant.createMany({
             data: assignment.assistants.map((assistant) => ({
@@ -76,70 +84,79 @@ export class CallService {
           });
         }
 
-        // 4. Histórico - Chamado criado
-        await tx.callHistory.create({
-          data: {
-            callId: createdCall.id,
-            userId,
-            action: "CREATED",
-            observation: "Chamado criado.",
-          },
+        // ================= HISTORY =================
+        sideEffects.history.push({
+          callId: createdCall.id,
+          userId,
+          action: "CREATED",
+          observation: "Chamado criado.",
         });
 
-        // 5. Histórico - Responsável
         if (assignment.responsible) {
-          await tx.callHistory.create({
-            data: {
-              callId: createdCall.id,
-              userId,
-              action: "ASSIGNED",
-              observation: `Responsável atribuído ao chamado.`,
-            },
+          sideEffects.history.push({
+            callId: createdCall.id,
+            userId,
+            action: "ASSIGNED",
+            observation: "Responsável atribuído ao chamado.",
+          });
+
+          // ================= NOTIFICATION =================
+          sideEffects.notifications.push({
+            userId: assignment.responsible.id,
+            callId: createdCall.id,
+            type: "CALL_ASSIGNED",
+            title: "Novo chamado atribuído",
+            message: `Você foi designado como responsável pelo chamado "${createdCall.title}".`,
           });
         }
 
-        // 6. Histórico - Auxiliares
         if (assignment.assistants.length > 0) {
-          await tx.callHistory.createMany({
-            data: assignment.assistants.map((assistant) => ({
+          sideEffects.history.push(
+            ...assignment.assistants.map((assistant) => ({
               callId: createdCall.id,
               userId,
               action: "ASSISTANT_ADDED",
               observation: `${assistant.name} adicionado como auxiliar.`,
             })),
-          });
-        }
+          );
 
-        // 7. Notificação para o responsável
-        if (assignment.responsible) {
-          await tx.notification.create({
-            data: {
-              userId: assignment.responsible.id,
-              callId: createdCall.id,
-              type: "CALL_ASSIGNED",
-              title: "Novo chamado atribuído",
-              message: `Você foi designado como responsável pelo chamado "${createdCall.title}".`,
-            },
-          });
-        }
-
-        // 8. Notificações para auxiliares
-        if (assignment.assistants.length > 0) {
-          await tx.notification.createMany({
-            data: assignment.assistants.map((assistant) => ({
+          sideEffects.notifications.push(
+            ...assignment.assistants.map((assistant) => ({
               userId: assistant.id,
               callId: createdCall.id,
               type: "NEW_CALL",
               title: "Você foi adicionado à equipe",
               message: `Você foi adicionado como auxiliar no chamado "${createdCall.title}".`,
             })),
-          });
+          );
         }
 
-        return createdCall;
+        return {
+          call: createdCall,
+          sideEffects,
+        };
       });
 
-      return call;
+      // =====================================================
+      // 🔥 EXECUÇÃO FORA DA TRANSACTION
+      // =====================================================
+      const { sideEffects } = result;
+
+      if (sideEffects.notifications.length > 0) {
+        await Promise.allSettled(
+          sideEffects.notifications.map((n) =>
+            prisma.notification.create({ data: n }),
+          ),
+        );
+      }
+
+      if (sideEffects.history.length > 0) {
+        await prisma.callHistory.createMany({
+          data: sideEffects.history,
+        });
+      }
+
+      return result.call;
     } catch (error) {
       console.log("💥 Error:", error);
 
@@ -351,18 +368,87 @@ export class CallService {
     };
   };
 
-  getCalls = async () => {
-    try {
-      const allCalls = await prisma.call.findMany({
-        include: { sector: true, openedBy: true, assignedTo: true },
-        orderBy: { createdAt: "desc" },
-      });
-
-      return allCalls;
-    } catch (error) {
-      console.log(error);
-
-      throw new AppError(400, "Error searching all sectors.");
+  private getInitialStatus = async (
+    tx: Prisma.TransactionClient,
+    assignment: AssignmentResult,
+  ): Promise<CallStatus> => {
+    // Não existe responsável
+    if (!assignment.responsible) {
+      return "OPEN";
     }
+
+    const technicianIds = [
+      assignment.responsible.id,
+      ...assignment.assistants.map((a) => a.id),
+    ];
+
+    const busyTechnicians = await tx.call.findFirst({
+      where: {
+        status: "IN_PROGRESS",
+        OR: [
+          {
+            assignedToId: {
+              in: technicianIds,
+            },
+          },
+          {
+            assistants: {
+              some: {
+                technicianId: {
+                  in: technicianIds,
+                },
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    return busyTechnicians ? "QUEUED" : "IN_PROGRESS";
+  };
+
+  getCalls = async (page = 1, limit = 20) => {
+    const skip = (page - 1) * limit;
+
+    const calls = await prisma.call.findMany({
+      select: {
+        id: true,
+        protocol: true,
+        title: true,
+        status: true,
+        priority: true,
+        createdAt: true,
+
+        location: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+
+        openedBy: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+
+        assignedTo: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+
+      orderBy: {
+        createdAt: "desc",
+      },
+
+      take: limit,
+      skip,
+    });
+
+    return calls;
   };
 }

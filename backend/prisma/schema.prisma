@@ -34,10 +34,11 @@ enum RequesterCallStatus {
 }
 
 enum CallStatus {
-  WAITING_APPROVAL
   OPEN
   IN_PROGRESS
+  QUEUED
   WAITING_PARTS
+  WAITING_APPROVAL
   COMPLETED
   REJECTED
 }
@@ -201,13 +202,13 @@ model Call {
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
-  @@index([status])
-  @@index([priority])
-  @@index([assignedToId])
-  @@index([openedById])
-  @@index([locationId])
-  @@index([requesterId])
-  @@index([requiredLevel])
+  @@index([assignedToId, status])
+  @@index([status, createdAt])
+  @@index([locationId, createdAt])
+  @@index([openedById, createdAt])
+  @@index([requesterId, createdAt])
+  @@index([priority, status])
+  @@index([requiredLevel, status])
 }
 
 model Area {

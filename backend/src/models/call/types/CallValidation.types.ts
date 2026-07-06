@@ -26,6 +26,25 @@ type Technician = Prisma.UserGetPayload<{
   };
 }>;
 
+export interface AssignmentResult {
+  responsible: {
+    id: string;
+    name: string;
+  } | null;
+
+  assistants: {
+    id: string;
+    name: string;
+  }[];
+}
+
+export type NotificationPayload = {
+  callId: string;
+  title: string;
+  responsibleId: string;
+  assistantsIds: string[];
+};
+
 export type CoverageValidationResult =
   | {
       success: true;
