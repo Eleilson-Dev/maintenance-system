@@ -12,11 +12,26 @@ type EligibleTechnician = Prisma.UserGetPayload<{
     };
   };
 }>;
+
+type Technician = Prisma.UserGetPayload<{
+  select: {
+    id: true;
+    name: true;
+    level: true;
+    userAreas: {
+      select: {
+        areaId: true;
+      };
+    };
+  };
+}>;
+
 export type CoverageValidationResult =
   | {
       success: true;
       eligibleTechnicians: EligibleTechnician[];
       coveredAreas: string[];
+      candidateTechnicians: Technician[];
     }
   | {
       success: false;

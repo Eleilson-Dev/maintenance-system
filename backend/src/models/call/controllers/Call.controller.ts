@@ -17,7 +17,7 @@ export class CallController {
     console.log(req.body);
     const userId = res.locals.user.id;
     const newCall = await this.callService.createAdminCall(userId, req.body);
-    // io.emit("call_created", newCall);
+    io.emit("call_created", newCall);
     return res.status(201).json(newCall);
   };
 

@@ -11,13 +11,14 @@ export class UserService {
     try {
       return await prisma.$transaction(async (tx) => {
         const hashedPassword = await bcrypt.hash(userData.password, 10);
+        const usersCount = await tx.user.count();
 
         const newUser = await tx.user.create({
           data: {
             name: userData.name,
             email: userData.email.toLowerCase(),
             password: hashedPassword,
-            role: userData.role,
+            role: usersCount === 0 ? "ADMIN" : userData.role,
             level: userData.level,
           },
           omit: { password: true },
@@ -67,7 +68,7 @@ export class UserService {
 
   listAllUsers = async () => {
     return await prisma.user.findMany({
-      include: { userAreas: true },
+      include: { userAreas: { omit: { id: true, userId: true } } },
       omit: { password: true },
     });
   };
