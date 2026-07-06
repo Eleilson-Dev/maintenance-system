@@ -172,6 +172,11 @@ model RequesterCall {
   @@index([locationId])
 }
 
+model ProtocolCounter {
+  year  Int @id
+  value Int
+}
+
 model Call {
   id            String           @id @default(uuid())
   protocol      String           @unique()

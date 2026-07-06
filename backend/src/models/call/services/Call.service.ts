@@ -42,11 +42,20 @@ export class CallService {
       const assignment = await this.validateAssignment(callData);
 
       const result = await prisma.$transaction(async (tx) => {
+        const year = new Date().getFullYear();
+
+        const counter = await tx.protocolCounter.upsert({
+          where: { year },
+          create: { year, value: 1 },
+          update: { value: { increment: 1 } },
+          select: { value: true },
+        });
+
         const status = await this.getInitialStatus(tx, assignment);
 
         const createdCall = await tx.call.create({
           data: {
-            protocol: generateProtocol(),
+            protocol: generateProtocol(counter.value),
             title: callData.title,
             description: callData.description,
             priority: callData.priority,
@@ -59,9 +68,6 @@ export class CallService {
           },
         });
 
-        // =====================================================
-        // 🔥 SIDE EFFECTS CENTRALIZADOS (MUDANÇA PRINCIPAL)
-        // =====================================================
         const sideEffects = {
           history: [] as any[],
           notifications: [] as any[],
@@ -84,7 +90,6 @@ export class CallService {
           });
         }
 
-        // ================= HISTORY =================
         sideEffects.history.push({
           callId: createdCall.id,
           userId,
@@ -100,7 +105,6 @@ export class CallService {
             observation: "Responsável atribuído ao chamado.",
           });
 
-          // ================= NOTIFICATION =================
           sideEffects.notifications.push({
             userId: assignment.responsible.id,
             callId: createdCall.id,
@@ -137,9 +141,6 @@ export class CallService {
         };
       });
 
-      // =====================================================
-      // 🔥 EXECUÇÃO FORA DA TRANSACTION
-      // =====================================================
       const { sideEffects } = result;
 
       if (sideEffects.notifications.length > 0) {
