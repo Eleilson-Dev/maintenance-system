@@ -404,7 +404,6 @@ export class CallService {
     const calls = await prisma.call.findMany({
       select: {
         id: true,
-        protocol: true,
         title: true,
         status: true,
         priority: true,
