@@ -1,0 +1,27 @@
+ const year = new Date().getFullYear();
+
+        const counter = await tx.protocolCounter.upsert({
+          where: { year },
+          create: { year, value: 1 },
+          update: { value: { increment: 1 } },
+          select: { value: true },
+        });
+
+        const status = await this.getInitialStatus(tx, assignment);
+
+        const createdCall = await tx.call.create({
+          data: {
+            protocol: generateProtocol(counter.value),
+            title: callData.title,
+            description: callData.description,
+            priority: callData.priority,
+            serviceType: callData.serviceType,
+            requiredLevel: callData.requiredLevel,
+            locationId: callData.locationId,
+            openedById: userId,
+            assignedToId: assignment.responsible?.id ?? null,
+            status,
+          },
+        });
+
+a forma de gerar o protocolo no call requester

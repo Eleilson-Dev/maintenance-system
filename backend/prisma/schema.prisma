@@ -157,15 +157,21 @@ model Requester {
 
 model RequesterCall {
   id          String              @id @default(uuid())
+  protocol    String              @unique
   title       String
   description String
-  locationId  String
-  location    Location            @relation(fields: [locationId], references: [id])
-  requesterId String
-  requester   Requester           @relation(fields: [requesterId], references: [id])
   status      RequesterCallStatus @default(PENDING)
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id])
+
+  requesterId String
+  requester   Requester @relation(fields: [requesterId], references: [id])
+
+  call Call?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([status])
   @@index([requesterId])
@@ -178,22 +184,30 @@ model ProtocolCounter {
 }
 
 model Call {
-  id            String           @id @default(uuid())
-  protocol      String           @unique()
+  id String @id @default(uuid())
+
+  requesterCallId String?        @unique
+  requesterCall   RequesterCall? @relation(fields: [requesterCallId], references: [id])
+
   title         String
   description   String?
   requiredLevel TechnicianLevel?
   status        CallStatus       @default(OPEN)
   priority      CallPriority     @default(MEDIUM)
   serviceType   ServiceType
-  locationId    String
-  location      Location         @relation(fields: [locationId], references: [id])
-  requesterId   String?
-  requester     Requester?       @relation(fields: [requesterId], references: [id])
-  openedById    String
-  openedBy      User             @relation("OpenedBy", fields: [openedById], references: [id])
-  assignedToId  String?
-  assignedTo    User?            @relation("AssignedTechnician", fields: [assignedToId], references: [id])
+
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id])
+
+  requesterId String?
+  requester   Requester? @relation(fields: [requesterId], references: [id])
+
+  openedById String
+  openedBy   User   @relation("OpenedBy", fields: [openedById], references: [id])
+
+  assignedToId String?
+  assignedTo   User?   @relation("AssignedTechnician", fields: [assignedToId], references: [id])
+
   report        Report?
   workLogs      WorkLog[]
   history       CallHistory[]
@@ -202,10 +216,11 @@ model Call {
   attachments   CallAttachment[]
   notifications Notification[]
   callAreas     CallArea[]
-  openedAt      DateTime         @default(now())
-  finishedAt    DateTime?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+
+  openedAt   DateTime  @default(now())
+  finishedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@index([assignedToId, status])
   @@index([status, createdAt])

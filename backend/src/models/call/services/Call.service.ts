@@ -42,20 +42,10 @@ export class CallService {
       const assignment = await this.validateAssignment(callData);
 
       const result = await prisma.$transaction(async (tx) => {
-        const year = new Date().getFullYear();
-
-        const counter = await tx.protocolCounter.upsert({
-          where: { year },
-          create: { year, value: 1 },
-          update: { value: { increment: 1 } },
-          select: { value: true },
-        });
-
         const status = await this.getInitialStatus(tx, assignment);
 
         const createdCall = await tx.call.create({
           data: {
-            protocol: generateProtocol(counter.value),
             title: callData.title,
             description: callData.description,
             priority: callData.priority,
