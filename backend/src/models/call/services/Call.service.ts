@@ -6,8 +6,12 @@ import {
   AssignmentResult,
   CoverageValidationResult,
 } from "../types/CallValidation.types.js";
-import { generateProtocol } from "../utils/generateProtocol.js";
-import { CallStatus, Prisma } from "../../../../generated/prisma/client.js";
+import { generateProtocol } from "../../../shared/utils/generateProtocol.js";
+import {
+  CallStatus,
+  Prisma,
+  ProtocolType,
+} from "../../../../generated/prisma/client.js";
 
 @injectable()
 export class CallService {
@@ -42,10 +46,31 @@ export class CallService {
       const assignment = await this.validateAssignment(callData);
 
       const result = await prisma.$transaction(async (tx) => {
+        const year = new Date().getFullYear();
+
+        const counter = await tx.protocolCounter.upsert({
+          where: {
+            id: `CALL-${year}`,
+          },
+          update: {
+            value: {
+              increment: 1,
+            },
+          },
+          create: {
+            id: `CALL-${year}`,
+            type: ProtocolType.CALL,
+            year,
+            value: 1,
+          },
+        });
+
+        const protocol = generateProtocol(counter.value, "CH");
         const status = await this.getInitialStatus(tx, assignment);
 
         const createdCall = await tx.call.create({
           data: {
+            protocol,
             title: callData.title,
             description: callData.description,
             priority: callData.priority,
@@ -55,6 +80,44 @@ export class CallService {
             openedById: userId,
             assignedToId: assignment.responsible?.id ?? null,
             status,
+          },
+          select: {
+            id: true,
+            protocol: true,
+            title: true,
+            description: true,
+            status: true,
+            priority: true,
+            serviceType: true,
+            requiredLevel: true,
+            createdAt: true,
+
+            location: {
+              select: {
+                id: true,
+                name: true,
+                parent: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+
+            openedBy: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+
+            assignedTo: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         });
 
@@ -176,6 +239,7 @@ export class CallService {
         id: true,
         name: true,
         level: true,
+        createdAt: true,
         userAreas: {
           select: {
             areaId: true,
@@ -404,15 +468,23 @@ export class CallService {
     const calls = await prisma.call.findMany({
       select: {
         id: true,
+        protocol: true,
         title: true,
         status: true,
         priority: true,
         createdAt: true,
+        serviceType: true,
 
         location: {
           select: {
             id: true,
             name: true,
+            parent: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
 

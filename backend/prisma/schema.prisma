@@ -102,6 +102,11 @@ enum NotificationType {
   SYSTEM
 }
 
+enum ProtocolType {
+  CALL
+  REQUESTER_CALL
+}
+
 model User {
   id                   String           @id @default(uuid())
   name                 String
@@ -179,13 +184,9 @@ model RequesterCall {
   @@index([locationId])
 }
 
-model ProtocolCounter {
-  year  Int @id
-  value Int
-}
-
 model Call {
-  id String @id @default(uuid())
+  id       String @id @default(uuid())
+  protocol String @unique
 
   requesterCallId String?        @unique
   requesterCall   RequesterCall? @relation(fields: [requesterCallId], references: [id])
@@ -230,6 +231,15 @@ model Call {
   @@index([requesterId, createdAt])
   @@index([priority, status])
   @@index([requiredLevel, status])
+}
+
+model ProtocolCounter {
+  id    String       @id
+  type  ProtocolType
+  year  Int
+  value Int
+
+  @@unique([type, year])
 }
 
 model Area {
