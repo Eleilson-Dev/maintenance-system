@@ -31,7 +31,7 @@ callRouter.post(
   (req, res) => callController.createAdminCall(req, res),
 );
 
-callRouter.get("/call/list", VerifyToken.execute, (req, res) =>
+callRouter.get("/calls/list", VerifyToken.execute, (req, res) =>
   callController.getCalls(req, res),
 );
 

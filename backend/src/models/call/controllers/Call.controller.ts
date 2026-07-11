@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { inject, injectable } from "tsyringe";
 import { CallService } from "../services/Call.service.js";
 import { io } from "../../../server.js";
+import { CallStatus } from "../../../../generated/prisma/enums.js";
 
 @injectable()
 export class CallController {
@@ -23,9 +24,14 @@ export class CallController {
   };
 
   getCalls = async (req: Request, res: Response) => {
-    const allCalls = await this.callService.getCalls();
+    const { page, limit, status } = req.query;
+    const calls = await this.callService.getCalls(
+      Number(page ?? 1),
+      Number(limit ?? 20),
+      status as CallStatus,
+    );
 
-    return res.status(200).json(allCalls);
+    return res.status(200).json(calls);
   };
 
   getCallById = async (req: Request, res: Response) => {};
