@@ -43,7 +43,7 @@ export class CallService {
 
   createAdminCall = async (userId: string, callData: CreateCallDTO) => {
     try {
-      const assignment = await this.validateAssignment(callData);
+      const assignment = await this.validateAssignment(userId, callData);
 
       const result = await prisma.$transaction(async (tx) => {
         const year = new Date().getFullYear();
@@ -303,7 +303,16 @@ export class CallService {
     };
   };
 
-  private validateAssignment = async (callData: CreateCallDTO) => {
+  private validateAssignment = async (
+    userId: string,
+    callData: CreateCallDTO,
+  ) => {
+    if (callData.assignedToId === userId) {
+      throw new AppError(
+        400,
+        "Você não pode atribuir um chamado para si mesmo.",
+      );
+    }
     const coverage = await this.validateCoverage(callData);
 
     if (!coverage.success) {
