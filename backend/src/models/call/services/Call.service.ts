@@ -471,7 +471,7 @@ export class CallService {
     return busyTechnicians ? "QUEUED" : "IN_PROGRESS";
   };
 
-  getCalls = async (page = 1, limit = 20, status?: CallStatus) => {
+  getCalls = async (page = 1, limit = 10, status?: CallStatus) => {
     const skip = (page - 1) * limit;
 
     const calls = await prisma.call.findMany({
@@ -489,6 +489,17 @@ export class CallService {
         priority: true,
         createdAt: true,
         serviceType: true,
+        requiredLevel: true,
+        callAreas: {
+          select: {
+            area: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
 
         location: {
           select: {
