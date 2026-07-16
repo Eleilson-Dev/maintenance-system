@@ -5,6 +5,7 @@ import { CreateCallDTO } from "../schemas/Call.schema.js";
 import {
   AssignmentResult,
   CoverageValidationResult,
+  GetCallsDTO,
 } from "../types/CallValidation.types.js";
 import { generateProtocol } from "../../../shared/utils/generateProtocol.js";
 import {
@@ -12,6 +13,15 @@ import {
   Prisma,
   ProtocolType,
 } from "../../../../generated/prisma/client.js";
+
+const ACTIVE_STATUSES = [
+  "OPEN",
+  "IN_PROGRESS",
+  "QUEUED",
+  "WAITING_PARTS",
+  "WAITING_APPROVAL",
+  "HELP_REQUESTED",
+] as const;
 
 @injectable()
 export class CallService {
@@ -471,72 +481,170 @@ export class CallService {
     return busyTechnicians ? "QUEUED" : "IN_PROGRESS";
   };
 
-  getCalls = async (page = 1, limit = 10, status?: CallStatus) => {
+  getCalls = async ({
+    page = 1,
+    limit = 20,
+    status,
+    search,
+    priority,
+    level,
+    areaId,
+  }: GetCallsDTO) => {
     const skip = (page - 1) * limit;
 
-    const calls = await prisma.call.findMany({
-      where: {
-        ...(status && {
-          status,
-        }),
-      },
+    const normalizedSearch = search?.trim();
 
-      select: {
-        id: true,
-        protocol: true,
-        title: true,
-        status: true,
-        priority: true,
-        createdAt: true,
-        serviceType: true,
-        requiredLevel: true,
+    const where: Prisma.CallWhereInput = {
+      ...(priority && { priority }),
+
+      ...(level && {
+        requiredLevel: level,
+      }),
+
+      ...(areaId && {
         callAreas: {
-          select: {
-            area: {
-              select: {
-                id: true,
-                name: true,
+          some: {
+            areaId,
+          },
+        },
+      }),
+
+      ...(normalizedSearch && {
+        OR: [
+          {
+            title: {
+              contains: normalizedSearch,
+              mode: Prisma.QueryMode.insensitive,
+            },
+          },
+          {
+            protocol: {
+              contains: normalizedSearch,
+              mode: Prisma.QueryMode.insensitive,
+            },
+          },
+          {
+            location: {
+              name: {
+                contains: normalizedSearch,
+                mode: Prisma.QueryMode.insensitive,
               },
+            },
+          },
+          {
+            location: {
+              parent: {
+                name: {
+                  contains: normalizedSearch,
+                  mode: Prisma.QueryMode.insensitive,
+                },
+              },
+            },
+          },
+          {
+            callAreas: {
+              some: {
+                area: {
+                  name: {
+                    contains: normalizedSearch,
+                    mode: Prisma.QueryMode.insensitive,
+                  },
+                },
+              },
+            },
+          },
+        ],
+      }),
+    };
+
+    // Trata o filtro de status
+    if (status === "ACTIVE") {
+      where.status = {
+        in: [
+          "OPEN",
+          "IN_PROGRESS",
+          "QUEUED",
+          "WAITING_PARTS",
+          "WAITING_APPROVAL",
+          "HELP_REQUESTED",
+        ],
+      };
+    } else if (status) {
+      where.status = status;
+    }
+
+    const [calls, total] = await Promise.all([
+      prisma.call.findMany({
+        where,
+
+        select: {
+          id: true,
+          protocol: true,
+          title: true,
+          status: true,
+          priority: true,
+          createdAt: true,
+          serviceType: true,
+          requiredLevel: true,
+
+          callAreas: {
+            select: {
+              area: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+
+          location: {
+            select: {
+              id: true,
+              name: true,
+              parent: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+
+          openedBy: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+
+          assignedTo: {
+            select: {
+              id: true,
+              name: true,
             },
           },
         },
 
-        location: {
-          select: {
-            id: true,
-            name: true,
-            parent: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-          },
+        orderBy: {
+          createdAt: "desc",
         },
 
-        openedBy: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
+        skip,
+        take: limit,
+      }),
 
-        assignedTo: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
+      prisma.call.count({
+        where,
+      }),
+    ]);
 
-      orderBy: {
-        createdAt: "desc",
-      },
-
-      take: limit,
-      skip,
-    });
-
-    return calls;
+    return {
+      calls,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   };
 }

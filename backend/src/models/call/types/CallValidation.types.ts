@@ -1,4 +1,9 @@
-import { Prisma } from "../../../../generated/prisma/client.js";
+import {
+  CallPriority,
+  CallStatus,
+  Prisma,
+  TechnicianLevel,
+} from "../../../../generated/prisma/client.js";
 
 type EligibleTechnician = Prisma.UserGetPayload<{
   select: {
@@ -71,3 +76,15 @@ export type ResponsibleValidationResult =
       message: string;
     }
   | null;
+
+type CallStatusFilter = CallStatus | "ACTIVE";
+
+export type GetCallsDTO = {
+  page?: number;
+  limit?: number;
+  status?: CallStatusFilter;
+  search?: string;
+  priority?: CallPriority;
+  level?: TechnicianLevel;
+  areaId?: string;
+};
