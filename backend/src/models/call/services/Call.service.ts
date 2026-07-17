@@ -1,7 +1,7 @@
 import { injectable } from "tsyringe";
 import { prisma } from "../../../config/db/database.js";
 import { AppError } from "../../../shared/errors/AppError.js";
-import { CreateCallDTO } from "../schemas/Call.schema.js";
+import { CreateCallDTO, PreviewCallDTO } from "../schemas/Call.schema.js";
 import {
   AssignmentResult,
   CoverageValidationResult,
@@ -14,18 +14,14 @@ import {
   ProtocolType,
 } from "../../../../generated/prisma/client.js";
 
-const ACTIVE_STATUSES = [
-  "OPEN",
-  "IN_PROGRESS",
-  "QUEUED",
-  "WAITING_PARTS",
-  "WAITING_APPROVAL",
-  "HELP_REQUESTED",
-] as const;
+type CoverageInput = {
+  areaIds: string[];
+  requiredLevel: PreviewCallDTO["requiredLevel"];
+};
 
 @injectable()
 export class CallService {
-  previewCall = async (callData: CreateCallDTO) => {
+  previewCall = async (callData: PreviewCallDTO) => {
     const coverage = await this.validateCoverage(callData);
 
     if (!coverage.success) {
@@ -39,7 +35,7 @@ export class CallService {
 
     const rules = this.validateAssignmentRules(callData);
 
-    const result = {
+    return {
       success: true,
       coverage: {
         technicians: coverage.eligibleTechnicians,
@@ -47,8 +43,6 @@ export class CallService {
       },
       rules,
     };
-
-    return result;
   };
 
   createAdminCall = async (userId: string, callData: CreateCallDTO) => {
@@ -233,7 +227,7 @@ export class CallService {
   };
 
   private validateCoverage = async (
-    callData: CreateCallDTO,
+    callData: CoverageInput,
   ): Promise<CoverageValidationResult> => {
     const candidateTechnicians = await prisma.user.findMany({
       where: {
@@ -245,11 +239,13 @@ export class CallService {
           },
         },
       },
+
       select: {
         id: true,
         name: true,
         level: true,
         createdAt: true,
+
         userAreas: {
           select: {
             areaId: true,
@@ -301,15 +297,14 @@ export class CallService {
     };
   };
 
-  private validateAssignmentRules = (callData: CreateCallDTO) => {
+  private validateAssignmentRules = (
+    callData: Pick<PreviewCallDTO, "areaIds">,
+  ) => {
     const isMultiAreaCall = callData.areaIds.length > 1;
 
-    const requiresResponsible = isMultiAreaCall;
-    const requiresTeam = isMultiAreaCall;
-
     return {
-      requiresResponsible,
-      requiresTeam,
+      requiresResponsible: isMultiAreaCall,
+      requiresTeam: isMultiAreaCall,
     };
   };
 

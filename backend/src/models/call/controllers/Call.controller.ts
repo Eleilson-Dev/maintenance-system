@@ -1,7 +1,9 @@
 import type { Request, Response } from "express";
 import { inject, injectable } from "tsyringe";
+
 import { CallService } from "../services/Call.service.js";
 import { io } from "../../../server.js";
+
 import {
   CallPriority,
   CallStatus,
@@ -10,7 +12,10 @@ import {
 
 @injectable()
 export class CallController {
-  constructor(@inject("CallService") private callService: CallService) {}
+  constructor(
+    @inject("CallService")
+    private callService: CallService,
+  ) {}
 
   previewCall = async (req: Request, res: Response) => {
     const preview = await this.callService.previewCall(req.body);
@@ -20,6 +25,7 @@ export class CallController {
 
   createAdminCall = async (req: Request, res: Response) => {
     const userId = res.locals.user.id;
+
     const newCall = await this.callService.createAdminCall(userId, req.body);
 
     io.emit("call_created", newCall);
@@ -38,16 +44,20 @@ export class CallController {
         typeof status === "string" && status.trim()
           ? (status as CallStatus)
           : undefined,
+
       search:
         typeof search === "string" && search.trim() ? search.trim() : undefined,
+
       priority:
         typeof priority === "string" && priority !== "ALL"
           ? (priority as CallPriority)
           : undefined,
+
       level:
         typeof level === "string" && level !== "ALL"
           ? (level as TechnicianLevel)
           : undefined,
+
       areaId: typeof areaId === "string" && areaId.trim() ? areaId : undefined,
     });
 
@@ -55,7 +65,10 @@ export class CallController {
   };
 
   getCallById = async (req: Request, res: Response) => {};
+
   assignTechnician = async (req: Request, res: Response) => {};
+
   updateCallStatus = async (req: Request, res: Response) => {};
+
   completeCall = async (req: Request, res: Response) => {};
 }
