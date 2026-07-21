@@ -8,7 +8,6 @@ import {
 
 const callBaseSchema = z.object({
   title: z.string().trim().min(5).max(120),
-
   description: z
     .string()
     .trim()
@@ -16,13 +15,9 @@ const callBaseSchema = z.object({
     .transform((value) => value || undefined),
 
   priority: z.nativeEnum(CallPriority),
-
   serviceType: z.nativeEnum(ServiceType),
-
-  requiredLevel: z.nativeEnum(TechnicianLevel),
-
+  requiredLevel: z.nativeEnum(TechnicianLevel).optional(),
   locationId: z.uuid(),
-
   areaIds: z.array(z.uuid()).min(1),
 });
 

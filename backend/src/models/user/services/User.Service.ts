@@ -19,7 +19,7 @@ export class UserService {
             email: userData.email.toLowerCase(),
             password: hashedPassword,
             role: usersCount === 0 ? "ADMIN" : userData.role,
-            level: userData.level,
+            level: "SENIOR",
           },
           omit: { password: true },
         });

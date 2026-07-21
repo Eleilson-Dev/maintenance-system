@@ -14,9 +14,10 @@ import {
   ProtocolType,
 } from "../../../../generated/prisma/client.js";
 
+const DEFAULT_TECHNICIAN_LEVEL = "SENIOR" as const;
+
 type CoverageInput = {
   areaIds: string[];
-  requiredLevel: PreviewCallDTO["requiredLevel"];
 };
 
 @injectable()
@@ -79,7 +80,7 @@ export class CallService {
             description: callData.description,
             priority: callData.priority,
             serviceType: callData.serviceType,
-            requiredLevel: callData.requiredLevel,
+            requiredLevel: DEFAULT_TECHNICIAN_LEVEL,
             locationId: callData.locationId,
             openedById: userId,
             assignedToId: assignment.responsible?.id ?? null,
@@ -263,7 +264,7 @@ export class CallService {
 
     const eligibleTechnicians = candidateTechnicians.filter(
       (technician) =>
-        LEVEL_ORDER[technician.level] >= LEVEL_ORDER[callData.requiredLevel],
+        LEVEL_ORDER[technician.level] >= LEVEL_ORDER[DEFAULT_TECHNICIAN_LEVEL],
     );
 
     const coveredAreas = new Set<string>();
