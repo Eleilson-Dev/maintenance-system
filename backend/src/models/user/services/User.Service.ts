@@ -68,8 +68,27 @@ export class UserService {
 
   listAllUsers = async () => {
     return await prisma.user.findMany({
-      include: { userAreas: { omit: { id: true, userId: true } } },
-      omit: { password: true },
+      include: {
+        userAreas: {
+          include: {
+            area: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+
+          omit: {
+            id: true,
+            userId: true,
+          },
+        },
+      },
+
+      omit: {
+        password: true,
+      },
     });
   };
 

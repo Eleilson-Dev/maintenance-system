@@ -26,11 +26,29 @@ export class CallService {
     const coverage = await this.validateCoverage(callData);
 
     if (!coverage.success) {
+      const missingAreas = await prisma.area.findMany({
+        where: {
+          id: {
+            in: coverage.missingAreas,
+          },
+        },
+
+        select: {
+          id: true,
+          name: true,
+        },
+      });
+
       return {
         success: false,
         step: "coverage",
-        message: coverage.message,
-        missingAreas: coverage.missingAreas,
+        message:
+          missingAreas.length === 1
+            ? `A área ${missingAreas[0].name} não possui técnico disponível.`
+            : `As áreas ${missingAreas
+                .map((area) => area.name)
+                .join(", ")} não possuem técnicos disponíveis.`,
+        missingAreas,
       };
     }
 
@@ -250,6 +268,13 @@ export class CallService {
         userAreas: {
           select: {
             areaId: true,
+
+            area: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
       },
