@@ -108,12 +108,14 @@ enum ProtocolType {
 }
 
 model User {
-  id                   String           @id @default(uuid())
-  name                 String
-  email                String           @unique
-  password             String
-  role                 UserRole         @default(TECHNICIAN)
-  level                TechnicianLevel  @default(JUNIOR)
+  id           String          @id @default(uuid())
+  name         String
+  email        String          @unique
+  password     String
+  role         UserRole        @default(TECHNICIAN)
+  isTechnician Boolean         @default(true)
+  level        TechnicianLevel @default(JUNIOR)
+
   assignedCalls        Call[]           @relation("AssignedTechnician")
   openedCalls          Call[]           @relation("OpenedBy")
   workLogs             WorkLog[]
@@ -123,12 +125,16 @@ model User {
   addedAssistants      CallAssistant[]  @relation("AssistantAddedBy")
   helpRequestsCreated  HelpRequest[]    @relation("HelpRequestedBy")
   helpRequestsReceived HelpRequest[]    @relation("HelpRequestedTechnician")
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
   callAttachments      CallAttachment[]
   reports              Report[]
   notifications        Notification[]
   userAreas            UserArea[]
+
+  commissionSettlements CommissionSettlement[] @relation("SettlementTechnician")
+  createdSettlements    CommissionSettlement[] @relation("SettlementCreatedBy")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([role])
   @@index([level])
@@ -218,6 +224,8 @@ model Call {
   attachments   CallAttachment[]
   notifications Notification[]
   callAreas     CallArea[]
+
+  commissionSettlementCall CommissionSettlementCall?
 
   openedAt   DateTime  @default(now())
   finishedAt DateTime?
@@ -405,4 +413,38 @@ model Notification {
   @@index([callId])
   @@index([read])
   @@index([type])
+}
+
+model CommissionSettlement {
+  id String @id @default(uuid())
+
+  technicianId String
+  technician   User   @relation("SettlementTechnician", fields: [technicianId], references: [id])
+
+  createdById String
+  createdBy   User   @relation("SettlementCreatedBy", fields: [createdById], references: [id])
+
+  totalCalls  Int
+  observation String?
+
+  calls CommissionSettlementCall[]
+
+  createdAt DateTime @default(now())
+
+  @@index([technicianId])
+  @@index([createdById])
+  @@index([createdAt])
+}
+
+model CommissionSettlementCall {
+  id String @id @default(uuid())
+
+  settlementId String
+  settlement   CommissionSettlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  callId       String               @unique
+  call         Call                 @relation(fields: [callId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([settlementId])
 }
