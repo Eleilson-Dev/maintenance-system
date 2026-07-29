@@ -578,7 +578,6 @@ export class CallService {
       }),
     };
 
-    // Trata o filtro de status
     if (status === "ACTIVE") {
       where.status = {
         in: [
@@ -607,6 +606,7 @@ export class CallService {
           createdAt: true,
           serviceType: true,
           requiredLevel: true,
+          description: true,
 
           callAreas: {
             select: {
@@ -623,6 +623,7 @@ export class CallService {
             select: {
               id: true,
               name: true,
+
               parent: {
                 select: {
                   id: true,
@@ -643,6 +644,21 @@ export class CallService {
             select: {
               id: true,
               name: true,
+              email: true,
+              level: true,
+            },
+          },
+
+          assistants: {
+            select: {
+              technician: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  level: true,
+                },
+              },
             },
           },
         },
@@ -660,8 +676,14 @@ export class CallService {
       }),
     ]);
 
+    const formattedCalls = calls.map((call) => ({
+      ...call,
+
+      assistants: call.assistants.map((assistant) => assistant.technician),
+    }));
+
     return {
-      calls,
+      calls: formattedCalls,
       total,
       page,
       limit,
