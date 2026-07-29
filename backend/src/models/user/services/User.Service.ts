@@ -73,20 +73,6 @@ export class UserService {
           level: true,
           createdAt: true,
           updatedAt: true,
-
-          assignedCalls: {
-            where: {
-              status: {
-                in: ["IN_PROGRESS", "QUEUED"],
-              },
-            },
-
-            select: {
-              id: true,
-              protocol: true,
-              status: true,
-            },
-          },
         },
       });
 
@@ -94,19 +80,66 @@ export class UserService {
         throw new AppError(404, "User not found.");
       }
 
+      const [responsibleCalls, assistantLinks] = await Promise.all([
+        prisma.call.findMany({
+          where: {
+            assignedToId: userId,
+
+            status: {
+              in: ["IN_PROGRESS", "QUEUED"],
+            },
+          },
+
+          select: {
+            id: true,
+            protocol: true,
+            status: true,
+          },
+        }),
+
+        prisma.callAssistant.findMany({
+          where: {
+            technicianId: userId,
+
+            call: {
+              status: {
+                in: ["IN_PROGRESS", "QUEUED"],
+              },
+            },
+          },
+
+          select: {
+            call: {
+              select: {
+                id: true,
+                protocol: true,
+                status: true,
+              },
+            },
+          },
+        }),
+      ]);
+
+      const assistantCalls = assistantLinks.map((item) => item.call);
+
+      const activeCalls = [
+        ...responsibleCalls.map((call) => ({
+          ...call,
+          participation: "RESPONSIBLE" as const,
+        })),
+
+        ...assistantCalls.map((call) => ({
+          ...call,
+          participation: "ASSISTANT" as const,
+        })),
+      ];
+
       return {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        isTechnician: user.isTechnician,
-        level: user.level,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
+        ...user,
 
-        hasActiveCall: user.assignedCalls.length > 0,
+        hasActiveCall: activeCalls.length > 0,
 
-        activeCalls: user.assignedCalls,
+        activeCalls,
       };
     } catch (error) {
       if (error instanceof AppError) {
@@ -118,7 +151,6 @@ export class UserService {
       throw new AppError(400, "Error while trying to find the user.");
     }
   };
-
   listAllUsers = async () => {
     return await prisma.user.findMany({
       include: {
