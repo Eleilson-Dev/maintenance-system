@@ -86,8 +86,6 @@ export class UserService {
               protocol: true,
               status: true,
             },
-
-            take: 1,
           },
         },
       });
@@ -108,15 +106,19 @@ export class UserService {
 
         hasActiveCall: user.assignedCalls.length > 0,
 
-        activeCall:
-          user.assignedCalls.length > 0 ? user.assignedCalls[0] : null,
+        activeCalls: user.assignedCalls,
       };
     } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+
       console.error(error);
 
       throw new AppError(400, "Error while trying to find the user.");
     }
   };
+
   listAllUsers = async () => {
     return await prisma.user.findMany({
       include: {
