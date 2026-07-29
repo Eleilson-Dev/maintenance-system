@@ -59,13 +59,64 @@ export class UserService {
 
   findUser = async (userId: string) => {
     try {
-      return await prisma.user.findUnique({ where: { id: userId } });
+      const user = await prisma.user.findUnique({
+        where: {
+          id: userId,
+        },
+
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          isTechnician: true,
+          level: true,
+          createdAt: true,
+          updatedAt: true,
+
+          assignedCalls: {
+            where: {
+              status: {
+                in: ["IN_PROGRESS", "QUEUED"],
+              },
+            },
+
+            select: {
+              id: true,
+              protocol: true,
+              status: true,
+            },
+
+            take: 1,
+          },
+        },
+      });
+
+      if (!user) {
+        throw new AppError(404, "User not found.");
+      }
+
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isTechnician: user.isTechnician,
+        level: user.level,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+
+        hasActiveCall: user.assignedCalls.length > 0,
+
+        activeCall:
+          user.assignedCalls.length > 0 ? user.assignedCalls[0] : null,
+      };
     } catch (error) {
       console.error(error);
+
       throw new AppError(400, "Error while trying to find the user.");
     }
   };
-
   listAllUsers = async () => {
     return await prisma.user.findMany({
       include: {
