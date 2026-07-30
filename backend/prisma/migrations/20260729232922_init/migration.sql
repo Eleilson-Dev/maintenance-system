@@ -8,13 +8,16 @@ CREATE TYPE "ServiceType" AS ENUM ('CORRECTIVE', 'PREVENTIVE', 'PREDICTIVE', 'IN
 CREATE TYPE "TechnicianLevel" AS ENUM ('JUNIOR', 'MID', 'SENIOR', 'SPECIALIST');
 
 -- CreateEnum
-CREATE TYPE "CallStatus" AS ENUM ('WAITING_APPROVAL', 'OPEN', 'IN_PROGRESS', 'WAITING_PARTS', 'COMPLETED', 'REJECTED');
+CREATE TYPE "RequesterCallStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED');
+
+-- CreateEnum
+CREATE TYPE "CallStatus" AS ENUM ('PLANNING', 'OPEN', 'READY', 'IN_PROGRESS', 'HELP_REQUESTED', 'WAITING_PARTS', 'WAITING_APPROVAL', 'COMPLETED', 'REJECTED', 'CANCELLED');
 
 -- CreateEnum
 CREATE TYPE "CallPriority" AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'URGENT');
 
 -- CreateEnum
-CREATE TYPE "CallHistoryAction" AS ENUM ('CREATED', 'ASSIGNED', 'TRANSFERRED', 'STARTED', 'PAUSED', 'RESUMED', 'WAITING_PARTS', 'HELP_REQUESTED', 'HELP_APPROVED', 'HELP_REJECTED', 'ASSISTANT_ADDED', 'ASSISTANT_REMOVED', 'COMMENT_ADDED', 'ATTACHMENT_ADDED', 'COMPLETED', 'REOPENED', 'PRIORITY_CHANGED', 'LEVEL_CHANGED', 'CATEGORY_CHANGED', 'LOCATION_CHANGED', 'STATUS_CHANGED');
+CREATE TYPE "CallHistoryAction" AS ENUM ('CREATED', 'ASSIGNED', 'TRANSFERRED', 'STARTED', 'PAUSED', 'RESUMED', 'WAITING_PARTS', 'HELP_REQUESTED', 'HELP_APPROVED', 'HELP_REJECTED', 'ASSISTANT_ADDED', 'ASSISTANT_REMOVED', 'COMMENT_ADDED', 'ATTACHMENT_ADDED', 'COMPLETED', 'REOPENED', 'PRIORITY_CHANGED', 'LEVEL_CHANGED', 'CATEGORY_CHANGED', 'LOCATION_CHANGED', 'STATUS_CHANGED', 'PLANNING_STARTED', 'PLANNING_UPDATED', 'PLANNING_CONFIRMED', 'PLANNING_CANCELLED', 'TEAM_CONFIRMED', 'READY_FOR_EXECUTION');
 
 -- CreateEnum
 CREATE TYPE "HelpRequestStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
@@ -25,6 +28,21 @@ CREATE TYPE "AttachmentType" AS ENUM ('BEFORE', 'AFTER', 'OTHER');
 -- CreateEnum
 CREATE TYPE "NotificationType" AS ENUM ('NEW_CALL', 'CALL_ASSIGNED', 'CALL_TRANSFERRED', 'HELP_REQUEST', 'HELP_APPROVED', 'HELP_REJECTED', 'WAITING_PARTS', 'COMMENT', 'CALL_COMPLETED', 'CALL_REOPENED', 'PRIORITY_CHANGED', 'SYSTEM');
 
+-- CreateEnum
+CREATE TYPE "ProtocolType" AS ENUM ('CALL', 'REQUESTER_CALL');
+
+-- CreateEnum
+CREATE TYPE "PlanningStatus" AS ENUM ('DRAFT', 'READY_TO_CONFIRM', 'CONFIRMED', 'CANCELLED');
+
+-- CreateEnum
+CREATE TYPE "PlanningMemberRole" AS ENUM ('RESPONSIBLE', 'ASSISTANT');
+
+-- CreateEnum
+CREATE TYPE "PlanningRequirementType" AS ENUM ('PART', 'TOOL', 'PPE', 'PERMIT', 'SHUTDOWN', 'OTHER');
+
+-- CreateEnum
+CREATE TYPE "PlanningRequirementStatus" AS ENUM ('PENDING', 'AVAILABLE', 'UNAVAILABLE', 'WAIVED');
+
 -- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
@@ -32,6 +50,7 @@ CREATE TABLE "User" (
     "email" TEXT NOT NULL,
     "password" TEXT NOT NULL,
     "role" "UserRole" NOT NULL DEFAULT 'TECHNICIAN',
+    "isTechnician" BOOLEAN NOT NULL DEFAULT true,
     "level" "TechnicianLevel" NOT NULL DEFAULT 'JUNIOR',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -64,12 +83,28 @@ CREATE TABLE "Requester" (
 );
 
 -- CreateTable
-CREATE TABLE "Call" (
+CREATE TABLE "RequesterCall" (
     "id" TEXT NOT NULL,
     "protocol" TEXT NOT NULL,
     "title" TEXT NOT NULL,
+    "description" TEXT NOT NULL,
+    "status" "RequesterCallStatus" NOT NULL DEFAULT 'PENDING',
+    "locationId" TEXT NOT NULL,
+    "requesterId" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "RequesterCall_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Call" (
+    "id" TEXT NOT NULL,
+    "protocol" TEXT NOT NULL,
+    "requesterCallId" TEXT,
+    "title" TEXT NOT NULL,
     "description" TEXT,
-    "requiredLevel" "TechnicianLevel" NOT NULL,
+    "requiredLevel" "TechnicianLevel",
     "status" "CallStatus" NOT NULL DEFAULT 'OPEN',
     "priority" "CallPriority" NOT NULL DEFAULT 'MEDIUM',
     "serviceType" "ServiceType" NOT NULL,
@@ -83,6 +118,66 @@ CREATE TABLE "Call" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "Call_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "CallPlanning" (
+    "id" TEXT NOT NULL,
+    "callId" TEXT NOT NULL,
+    "status" "PlanningStatus" NOT NULL DEFAULT 'DRAFT',
+    "plannedStartAt" TIMESTAMP(3),
+    "plannedEndAt" TIMESTAMP(3),
+    "instructions" TEXT,
+    "observations" TEXT,
+    "requiresShutdown" BOOLEAN NOT NULL DEFAULT false,
+    "requiresPermit" BOOLEAN NOT NULL DEFAULT false,
+    "requiresParts" BOOLEAN NOT NULL DEFAULT false,
+    "requiresTools" BOOLEAN NOT NULL DEFAULT false,
+    "createdById" TEXT NOT NULL,
+    "confirmedById" TEXT,
+    "confirmedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "CallPlanning_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "CallPlanningMember" (
+    "id" TEXT NOT NULL,
+    "planningId" TEXT NOT NULL,
+    "technicianId" TEXT NOT NULL,
+    "role" "PlanningMemberRole" NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "userId" TEXT,
+
+    CONSTRAINT "CallPlanningMember_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "CallPlanningRequirement" (
+    "id" TEXT NOT NULL,
+    "planningId" TEXT NOT NULL,
+    "type" "PlanningRequirementType" NOT NULL,
+    "status" "PlanningRequirementStatus" NOT NULL DEFAULT 'PENDING',
+    "description" TEXT NOT NULL,
+    "quantity" DECIMAL(65,30),
+    "unit" TEXT,
+    "observation" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "CallPlanningRequirement_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ProtocolCounter" (
+    "id" TEXT NOT NULL,
+    "type" "ProtocolType" NOT NULL,
+    "year" INTEGER NOT NULL,
+    "value" INTEGER NOT NULL,
+
+    CONSTRAINT "ProtocolCounter_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -218,6 +313,28 @@ CREATE TABLE "Notification" (
     CONSTRAINT "Notification_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "CommissionSettlement" (
+    "id" TEXT NOT NULL,
+    "technicianId" TEXT NOT NULL,
+    "createdById" TEXT NOT NULL,
+    "totalCalls" INTEGER NOT NULL,
+    "observation" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "CommissionSettlement_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "CommissionSettlementCall" (
+    "id" TEXT NOT NULL,
+    "settlementId" TEXT NOT NULL,
+    "callId" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "CommissionSettlementCall_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
@@ -237,28 +354,79 @@ CREATE INDEX "Location_parentId_idx" ON "Location"("parentId");
 CREATE INDEX "Location_normalizedName_idx" ON "Location"("normalizedName");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "RequesterCall_protocol_key" ON "RequesterCall"("protocol");
+
+-- CreateIndex
+CREATE INDEX "RequesterCall_status_idx" ON "RequesterCall"("status");
+
+-- CreateIndex
+CREATE INDEX "RequesterCall_requesterId_idx" ON "RequesterCall"("requesterId");
+
+-- CreateIndex
+CREATE INDEX "RequesterCall_locationId_idx" ON "RequesterCall"("locationId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Call_protocol_key" ON "Call"("protocol");
 
 -- CreateIndex
-CREATE INDEX "Call_status_idx" ON "Call"("status");
+CREATE UNIQUE INDEX "Call_requesterCallId_key" ON "Call"("requesterCallId");
 
 -- CreateIndex
-CREATE INDEX "Call_priority_idx" ON "Call"("priority");
+CREATE INDEX "Call_assignedToId_status_idx" ON "Call"("assignedToId", "status");
 
 -- CreateIndex
-CREATE INDEX "Call_assignedToId_idx" ON "Call"("assignedToId");
+CREATE INDEX "Call_status_createdAt_idx" ON "Call"("status", "createdAt");
 
 -- CreateIndex
-CREATE INDEX "Call_openedById_idx" ON "Call"("openedById");
+CREATE INDEX "Call_locationId_createdAt_idx" ON "Call"("locationId", "createdAt");
 
 -- CreateIndex
-CREATE INDEX "Call_locationId_idx" ON "Call"("locationId");
+CREATE INDEX "Call_openedById_createdAt_idx" ON "Call"("openedById", "createdAt");
 
 -- CreateIndex
-CREATE INDEX "Call_requesterId_idx" ON "Call"("requesterId");
+CREATE INDEX "Call_requesterId_createdAt_idx" ON "Call"("requesterId", "createdAt");
 
 -- CreateIndex
-CREATE INDEX "Call_requiredLevel_idx" ON "Call"("requiredLevel");
+CREATE INDEX "Call_priority_status_idx" ON "Call"("priority", "status");
+
+-- CreateIndex
+CREATE INDEX "Call_requiredLevel_status_idx" ON "Call"("requiredLevel", "status");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "CallPlanning_callId_key" ON "CallPlanning"("callId");
+
+-- CreateIndex
+CREATE INDEX "CallPlanning_status_idx" ON "CallPlanning"("status");
+
+-- CreateIndex
+CREATE INDEX "CallPlanning_plannedStartAt_idx" ON "CallPlanning"("plannedStartAt");
+
+-- CreateIndex
+CREATE INDEX "CallPlanning_createdById_idx" ON "CallPlanning"("createdById");
+
+-- CreateIndex
+CREATE INDEX "CallPlanning_confirmedById_idx" ON "CallPlanning"("confirmedById");
+
+-- CreateIndex
+CREATE INDEX "CallPlanningMember_planningId_idx" ON "CallPlanningMember"("planningId");
+
+-- CreateIndex
+CREATE INDEX "CallPlanningMember_technicianId_idx" ON "CallPlanningMember"("technicianId");
+
+-- CreateIndex
+CREATE INDEX "CallPlanningMember_role_idx" ON "CallPlanningMember"("role");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "CallPlanningMember_planningId_technicianId_key" ON "CallPlanningMember"("planningId", "technicianId");
+
+-- CreateIndex
+CREATE INDEX "CallPlanningRequirement_planningId_idx" ON "CallPlanningRequirement"("planningId");
+
+-- CreateIndex
+CREATE INDEX "CallPlanningRequirement_type_status_idx" ON "CallPlanningRequirement"("type", "status");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ProtocolCounter_type_year_key" ON "ProtocolCounter"("type", "year");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Area_name_key" ON "Area"("name");
@@ -353,8 +521,32 @@ CREATE INDEX "Notification_read_idx" ON "Notification"("read");
 -- CreateIndex
 CREATE INDEX "Notification_type_idx" ON "Notification"("type");
 
+-- CreateIndex
+CREATE INDEX "CommissionSettlement_technicianId_idx" ON "CommissionSettlement"("technicianId");
+
+-- CreateIndex
+CREATE INDEX "CommissionSettlement_createdById_idx" ON "CommissionSettlement"("createdById");
+
+-- CreateIndex
+CREATE INDEX "CommissionSettlement_createdAt_idx" ON "CommissionSettlement"("createdAt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "CommissionSettlementCall_callId_key" ON "CommissionSettlementCall"("callId");
+
+-- CreateIndex
+CREATE INDEX "CommissionSettlementCall_settlementId_idx" ON "CommissionSettlementCall"("settlementId");
+
 -- AddForeignKey
 ALTER TABLE "Location" ADD CONSTRAINT "Location_parentId_fkey" FOREIGN KEY ("parentId") REFERENCES "Location"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RequesterCall" ADD CONSTRAINT "RequesterCall_locationId_fkey" FOREIGN KEY ("locationId") REFERENCES "Location"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RequesterCall" ADD CONSTRAINT "RequesterCall_requesterId_fkey" FOREIGN KEY ("requesterId") REFERENCES "Requester"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Call" ADD CONSTRAINT "Call_requesterCallId_fkey" FOREIGN KEY ("requesterCallId") REFERENCES "RequesterCall"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Call" ADD CONSTRAINT "Call_locationId_fkey" FOREIGN KEY ("locationId") REFERENCES "Location"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -367,6 +559,27 @@ ALTER TABLE "Call" ADD CONSTRAINT "Call_openedById_fkey" FOREIGN KEY ("openedByI
 
 -- AddForeignKey
 ALTER TABLE "Call" ADD CONSTRAINT "Call_assignedToId_fkey" FOREIGN KEY ("assignedToId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "CallPlanning" ADD CONSTRAINT "CallPlanning_callId_fkey" FOREIGN KEY ("callId") REFERENCES "Call"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "CallPlanning" ADD CONSTRAINT "CallPlanning_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "CallPlanning" ADD CONSTRAINT "CallPlanning_confirmedById_fkey" FOREIGN KEY ("confirmedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "CallPlanningMember" ADD CONSTRAINT "CallPlanningMember_planningId_fkey" FOREIGN KEY ("planningId") REFERENCES "CallPlanning"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "CallPlanningMember" ADD CONSTRAINT "CallPlanningMember_technicianId_fkey" FOREIGN KEY ("technicianId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "CallPlanningMember" ADD CONSTRAINT "CallPlanningMember_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "CallPlanningRequirement" ADD CONSTRAINT "CallPlanningRequirement_planningId_fkey" FOREIGN KEY ("planningId") REFERENCES "CallPlanning"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "CallArea" ADD CONSTRAINT "CallArea_callId_fkey" FOREIGN KEY ("callId") REFERENCES "Call"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -433,3 +646,15 @@ ALTER TABLE "Notification" ADD CONSTRAINT "Notification_userId_fkey" FOREIGN KEY
 
 -- AddForeignKey
 ALTER TABLE "Notification" ADD CONSTRAINT "Notification_callId_fkey" FOREIGN KEY ("callId") REFERENCES "Call"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "CommissionSettlement" ADD CONSTRAINT "CommissionSettlement_technicianId_fkey" FOREIGN KEY ("technicianId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "CommissionSettlement" ADD CONSTRAINT "CommissionSettlement_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "CommissionSettlementCall" ADD CONSTRAINT "CommissionSettlementCall_settlementId_fkey" FOREIGN KEY ("settlementId") REFERENCES "CommissionSettlement"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "CommissionSettlementCall" ADD CONSTRAINT "CommissionSettlementCall_callId_fkey" FOREIGN KEY ("callId") REFERENCES "Call"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

@@ -34,14 +34,16 @@ enum RequesterCallStatus {
 }
 
 enum CallStatus {
+  PLANNING
   OPEN
+  READY
   IN_PROGRESS
-  QUEUED
   HELP_REQUESTED
   WAITING_PARTS
   WAITING_APPROVAL
   COMPLETED
   REJECTED
+  CANCELLED
 }
 
 enum CallPriority {
@@ -73,6 +75,12 @@ enum CallHistoryAction {
   CATEGORY_CHANGED
   LOCATION_CHANGED
   STATUS_CHANGED
+  PLANNING_STARTED
+  PLANNING_UPDATED
+  PLANNING_CONFIRMED
+  PLANNING_CANCELLED
+  TEAM_CONFIRMED
+  READY_FOR_EXECUTION
 }
 
 enum HelpRequestStatus {
@@ -107,6 +115,34 @@ enum ProtocolType {
   REQUESTER_CALL
 }
 
+enum PlanningStatus {
+  DRAFT
+  READY_TO_CONFIRM
+  CONFIRMED
+  CANCELLED
+}
+
+enum PlanningMemberRole {
+  RESPONSIBLE
+  ASSISTANT
+}
+
+enum PlanningRequirementType {
+  PART
+  TOOL
+  PPE
+  PERMIT
+  SHUTDOWN
+  OTHER
+}
+
+enum PlanningRequirementStatus {
+  PENDING
+  AVAILABLE
+  UNAVAILABLE
+  WAIVED
+}
+
 model User {
   id           String          @id @default(uuid())
   name         String
@@ -132,6 +168,10 @@ model User {
 
   commissionSettlements CommissionSettlement[] @relation("SettlementTechnician")
   createdSettlements    CommissionSettlement[] @relation("SettlementCreatedBy")
+
+  createdCallPlannings   CallPlanning[]       @relation("PlanningCreatedBy")
+  confirmedCallPlannings CallPlanning[]       @relation("PlanningConfirmedBy")
+  planningMemberships    CallPlanningMember[] @relation("PlanningMemberTechnician")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -216,6 +256,8 @@ model Call {
   assignedToId String?
   assignedTo   User?   @relation("AssignedTechnician", fields: [assignedToId], references: [id])
 
+  planning CallPlanning?
+
   report        Report?
   workLogs      WorkLog[]
   history       CallHistory[]
@@ -239,6 +281,84 @@ model Call {
   @@index([requesterId, createdAt])
   @@index([priority, status])
   @@index([requiredLevel, status])
+}
+
+model CallPlanning {
+  id String @id @default(uuid())
+
+  callId String @unique
+  call   Call   @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  status PlanningStatus @default(DRAFT)
+
+  plannedStartAt DateTime?
+  plannedEndAt   DateTime?
+
+  instructions String?
+  observations String?
+
+  requiresShutdown Boolean @default(false)
+  requiresPermit   Boolean @default(false)
+  requiresParts    Boolean @default(false)
+  requiresTools    Boolean @default(false)
+
+  createdById String
+  createdBy   User   @relation("PlanningCreatedBy", fields: [createdById], references: [id])
+
+  confirmedById String?
+  confirmedBy   User?   @relation("PlanningConfirmedBy", fields: [confirmedById], references: [id])
+
+  confirmedAt DateTime?
+
+  teamMembers  CallPlanningMember[]
+  requirements CallPlanningRequirement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([plannedStartAt])
+  @@index([createdById])
+  @@index([confirmedById])
+}
+
+model CallPlanningMember {
+  id String @id @default(uuid())
+
+  planningId String
+  planning   CallPlanning @relation(fields: [planningId], references: [id], onDelete: Cascade)
+
+  technicianId String
+  technician   User   @relation("PlanningMemberTechnician", fields: [technicianId], references: [id])
+
+  role PlanningMemberRole
+
+  createdAt DateTime @default(now())
+
+  @@unique([planningId, technicianId])
+  @@index([planningId])
+  @@index([technicianId])
+  @@index([role])
+}
+
+model CallPlanningRequirement {
+  id String @id @default(uuid())
+
+  planningId String
+  planning   CallPlanning @relation(fields: [planningId], references: [id], onDelete: Cascade)
+
+  type        PlanningRequirementType
+  status      PlanningRequirementStatus @default(PENDING)
+  description String
+  quantity    Decimal?
+  unit        String?
+  observation String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([planningId])
+  @@index([type, status])
 }
 
 model ProtocolCounter {
