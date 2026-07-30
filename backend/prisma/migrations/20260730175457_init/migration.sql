@@ -149,7 +149,6 @@ CREATE TABLE "CallPlanningMember" (
     "technicianId" TEXT NOT NULL,
     "role" "PlanningMemberRole" NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "userId" TEXT,
 
     CONSTRAINT "CallPlanningMember_pkey" PRIMARY KEY ("id")
 );
@@ -574,9 +573,6 @@ ALTER TABLE "CallPlanningMember" ADD CONSTRAINT "CallPlanningMember_planningId_f
 
 -- AddForeignKey
 ALTER TABLE "CallPlanningMember" ADD CONSTRAINT "CallPlanningMember_technicianId_fkey" FOREIGN KEY ("technicianId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "CallPlanningMember" ADD CONSTRAINT "CallPlanningMember_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "CallPlanningRequirement" ADD CONSTRAINT "CallPlanningRequirement_planningId_fkey" FOREIGN KEY ("planningId") REFERENCES "CallPlanning"("id") ON DELETE CASCADE ON UPDATE CASCADE;

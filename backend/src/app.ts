@@ -11,6 +11,7 @@ import { locationRouter } from "./models/location/routes/Location.routes.js";
 
 import { HandleErrors } from "./shared/errors/HandleErrors.js";
 import { AreaRouter } from "./models/area/routes/Area.routes.js";
+import { planningRouter } from "./models/planning/routes/Planning.routes.js";
 
 export const app = express();
 
@@ -26,6 +27,7 @@ app.use("/maintenance", userRouter);
 app.use("/maintenance", AreaRouter);
 app.use("/maintenance", locationRouter);
 app.use("/maintenance", callRouter);
+app.use("/maintenance", planningRouter);
 app.use("/maintenance", reportRouter);
 
 app.use(HandleErrors.execute);

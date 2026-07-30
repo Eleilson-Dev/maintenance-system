@@ -1,10 +1,30 @@
 import { Router } from "express";
 import { container } from "tsyringe";
+import { PlanningController } from "../controllers/Planning.controller.js";
+import { PlanningService } from "../services/Planning.Service.js";
+import { ValidateBody } from "../../../shared/middlewares/ValidateBody.middleware.js";
 
-import { GenericController } from "../controllers/generic.controller.js";
-import { GenericService } from "../services/generic.Service.js";
+import { updatePlanningTeamSchema } from "../schemas/Planning.schema.js";
+import { VerifyToken } from "../../../shared/middlewares/VerifyToken.middleware.js";
+import { VerifyAdmin } from "../../../shared/middlewares/VerifyAdmin.middleware.js";
 
-container.registerSingleton("GenericService", GenericService);
-const genericController = container.resolve(GenericController);
+container.registerSingleton("PlanningService", PlanningService);
 
-export const genericRouter = Router();
+const planningController = container.resolve(PlanningController);
+
+export const planningRouter = Router();
+
+planningRouter.put(
+  "/call/:callId/planning/team",
+  ValidateBody.execute(updatePlanningTeamSchema),
+  VerifyToken.execute,
+  VerifyAdmin.execute,
+  (req, res) => planningController.updatePlanningTeam(req, res),
+);
+
+planningRouter.get(
+  "/planning/list",
+  VerifyToken.execute,
+  VerifyAdmin.execute,
+  (req, res) => planningController.listAllPlannings(req, res),
+);

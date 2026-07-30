@@ -86,7 +86,7 @@ export class UserService {
             assignedToId: userId,
 
             status: {
-              in: ["IN_PROGRESS", "QUEUED"],
+              in: ["IN_PROGRESS"],
             },
           },
 
@@ -103,7 +103,7 @@ export class UserService {
 
             call: {
               status: {
-                in: ["IN_PROGRESS", "QUEUED"],
+                in: ["IN_PROGRESS"],
               },
             },
           },

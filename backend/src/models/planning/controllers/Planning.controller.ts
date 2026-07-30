@@ -1,10 +1,43 @@
 import type { Request, Response } from "express";
 import { inject, injectable } from "tsyringe";
-import type { GenericService } from "../services/generic.Service.js";
+
+import { AppError } from "../../../shared/errors/AppError.js";
+
+import type { PlanningService } from "../services/Planning.Service.js";
 
 @injectable()
-export class GenericController {
+export class PlanningController {
   constructor(
-    @inject("GenericService") private genericService: GenericService,
+    @inject("PlanningService")
+    private readonly planningService: PlanningService,
   ) {}
+
+  updatePlanningTeam = async (req: Request, res: Response) => {
+    const { callId } = req.params;
+
+    if (typeof callId !== "string") {
+      throw new AppError(400, "O ID do chamado é inválido.");
+    }
+
+    const planning = await this.planningService.updatePlanningTeam(
+      {
+        callId,
+      },
+      req.body,
+    );
+
+    return res.status(200).json({
+      message: "Equipe do planejamento atualizada com sucesso.",
+      planning,
+    });
+  };
+
+  listAllPlannings = async (req: Request, res: Response) => {
+    const plannings = await this.planningService.listAllPlannings();
+
+    return res.status(200).json({
+      total: plannings.length,
+      plannings,
+    });
+  };
 }

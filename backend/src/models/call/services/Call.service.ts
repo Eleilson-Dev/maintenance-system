@@ -67,7 +67,8 @@ export class CallService {
         throw new AppError(400, coverage.message);
       }
 
-      const requiresPlanning = callData.areaIds.length > 1;
+      const requiresPlanning =
+        callData.areaIds.length > 1 || callData.isPlanning;
 
       const createdCall = await prisma.$transaction(async (tx) => {
         const year = new Date().getFullYear();

@@ -1,43 +1,59 @@
 import type { NextFunction, Request, Response } from "express";
-import { AppError } from "../errors/AppError.js";
 import jwt from "jsonwebtoken";
+
 import { prisma } from "../../config/db/database.js";
+import { AppError } from "../errors/AppError.js";
+
+type TokenPayload = {
+  userId: string;
+};
 
 export class VerifyToken {
   static async execute(req: Request, res: Response, next: NextFunction) {
-    const authorization = req.headers.authorization;
-    const token = authorization?.replace("Bearer", "").trim();
-
-    if (!token) {
-      throw new AppError(401, "Token is required");
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
-
-    const { userId } = decoded;
-
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-
-    if (!user) {
-      throw new AppError(401, "Invalid session");
-    }
-
     try {
+      const authorization = req.headers.authorization;
+
+      if (!authorization) {
+        throw new AppError(401, "Token is required");
+      }
+
+      const [type, token] = authorization.split(" ");
+
+      if (type !== "Bearer" || !token) {
+        throw new AppError(401, "Token format is invalid");
+      }
+
+      const secret = process.env.JWT_SECRET;
+
+      if (!secret) {
+        throw new AppError(500, "JWT secret is not configured");
+      }
+
+      const decoded = jwt.verify(token, secret) as TokenPayload;
+
+      const user = await prisma.user.findUnique({
+        where: {
+          id: decoded.userId,
+        },
+      });
+
+      if (!user) {
+        throw new AppError(401, "Invalid session");
+      }
+
       res.locals.user = user;
 
-      next();
-    } catch (error: any) {
-      const errorMap: Record<string, { status: number; message: string }> = {
-        TokenExpiredError: { status: 401, message: "Token expired" },
-        JsonWebTokenError: { status: 400, message: "Token is not valid" },
-      };
+      return next();
+    } catch (error) {
+      if (error instanceof jwt.TokenExpiredError) {
+        return next(new AppError(401, "Token expired"));
+      }
 
-      const { status, message } = errorMap[error.name] || {
-        status: 500,
-        message: "Internal Server Error",
-      };
+      if (error instanceof jwt.JsonWebTokenError) {
+        return next(new AppError(401, "Token is not valid"));
+      }
 
-      throw new AppError(status, message);
+      return next(error);
     }
   }
 }
