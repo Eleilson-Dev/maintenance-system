@@ -22,6 +22,13 @@ planningRouter.put(
   (req, res) => planningController.updatePlanningTeam(req, res),
 );
 
+planningRouter.patch(
+  "/call/:callId/planning/confirm",
+  VerifyToken.execute,
+  VerifyAdmin.execute,
+  (req, res) => planningController.confirmPlanning(req, res),
+);
+
 planningRouter.get(
   "/planning/list",
   VerifyToken.execute,

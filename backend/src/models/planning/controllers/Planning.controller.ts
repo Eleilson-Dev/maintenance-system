@@ -32,6 +32,32 @@ export class PlanningController {
     });
   };
 
+  confirmPlanning = async (req: Request, res: Response) => {
+    const { callId } = req.params;
+
+    if (typeof callId !== "string") {
+      throw new AppError(400, "O ID do chamado é inválido.");
+    }
+
+    const confirmedById = res.locals.user.id;
+
+    if (typeof confirmedById !== "string") {
+      throw new AppError(401, "Usuário não autenticado.");
+    }
+
+    const result = await this.planningService.confirmPlanning(
+      {
+        callId,
+      },
+      confirmedById,
+    );
+
+    return res.status(200).json({
+      message: "Planejamento confirmado com sucesso.",
+      ...result,
+    });
+  };
+
   listAllPlannings = async (req: Request, res: Response) => {
     const plannings = await this.planningService.listAllPlannings();
 

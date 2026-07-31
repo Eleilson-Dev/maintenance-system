@@ -279,6 +279,355 @@ export class PlanningService {
     };
   };
 
+  confirmPlanning = async (
+    { callId }: PlanningParamsDTO,
+    confirmedById: string,
+  ) => {
+    return prisma.$transaction(async (tx) => {
+      const call = await tx.call.findUnique({
+        where: {
+          id: callId,
+        },
+        select: {
+          id: true,
+          title: true,
+          protocol: true,
+          status: true,
+          openedById: true,
+
+          callAreas: {
+            select: {
+              areaId: true,
+
+              area: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!call) {
+        throw new AppError(404, "Chamado não encontrado.");
+      }
+
+      if (call.status !== "PLANNING") {
+        throw new AppError(
+          400,
+          "Somente chamados em planejamento podem ser confirmados.",
+        );
+      }
+
+      const planning = await tx.callPlanning.findUnique({
+        where: {
+          callId,
+        },
+        select: {
+          id: true,
+          status: true,
+
+          teamMembers: {
+            select: {
+              id: true,
+              role: true,
+              technicianId: true,
+
+              technician: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  role: true,
+                  isTechnician: true,
+
+                  userAreas: {
+                    select: {
+                      areaId: true,
+
+                      area: {
+                        select: {
+                          id: true,
+                          name: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!planning) {
+        throw new AppError(
+          404,
+          "O planejamento deste chamado não foi encontrado.",
+        );
+      }
+
+      if (planning.status !== "DRAFT") {
+        throw new AppError(
+          400,
+          "Somente planejamentos em rascunho podem ser confirmados.",
+        );
+      }
+
+      const responsibleMember = planning.teamMembers.find(
+        (member) => member.role === "RESPONSIBLE",
+      );
+
+      if (!responsibleMember) {
+        throw new AppError(
+          400,
+          "Defina um responsável antes de confirmar o planejamento.",
+        );
+      }
+
+      const assistantMembers = planning.teamMembers.filter(
+        (member) => member.role === "ASSISTANT",
+      );
+
+      const teamMembers = [responsibleMember, ...assistantMembers];
+
+      const technicianIds = teamMembers.map((member) => member.technicianId);
+
+      const uniqueTechnicianIds = [...new Set(technicianIds)];
+
+      if (uniqueTechnicianIds.length !== technicianIds.length) {
+        throw new AppError(
+          400,
+          "Existem técnicos repetidos na equipe do planejamento.",
+        );
+      }
+
+      if (technicianIds.includes(call.openedById)) {
+        throw new AppError(
+          400,
+          "Quem criou o chamado não pode participar da equipe.",
+        );
+      }
+
+      const invalidTechnician = teamMembers.find(
+        (member) =>
+          member.technician.role !== "TECHNICIAN" ||
+          !member.technician.isTechnician,
+      );
+
+      if (invalidTechnician) {
+        throw new AppError(
+          400,
+          `${invalidTechnician.technician.name} não é um técnico válido.`,
+        );
+      }
+
+      if (call.callAreas.length === 0) {
+        throw new AppError(400, "O chamado não possui áreas vinculadas.");
+      }
+
+      const coveredAreaIds = new Set<string>();
+
+      teamMembers.forEach((member) => {
+        member.technician.userAreas.forEach((userArea) => {
+          coveredAreaIds.add(userArea.areaId);
+        });
+      });
+
+      const uncoveredAreas = call.callAreas.filter(
+        (callArea) => !coveredAreaIds.has(callArea.areaId),
+      );
+
+      if (uncoveredAreas.length > 0) {
+        const uncoveredAreaNames = uncoveredAreas.map(
+          (callArea) => callArea.area.name,
+        );
+
+        throw new AppError(
+          400,
+          uncoveredAreaNames.length === 1
+            ? `A equipe não cobre mais a área ${uncoveredAreaNames[0]}.`
+            : `A equipe não cobre mais as áreas ${uncoveredAreaNames.join(", ")}.`,
+        );
+      }
+
+      const activeStatuses = [
+        "OPEN",
+        "READY",
+        "IN_PROGRESS",
+        "WAITING_PARTS",
+        "HELP_REQUESTED",
+      ] as const;
+
+      const callsAsResponsible = await tx.call.findMany({
+        where: {
+          id: {
+            not: callId,
+          },
+
+          assignedToId: {
+            in: technicianIds,
+          },
+
+          status: {
+            in: [...activeStatuses],
+          },
+        },
+        select: {
+          id: true,
+          title: true,
+          assignedToId: true,
+        },
+      });
+
+      const assistantAssignments = await tx.callAssistant.findMany({
+        where: {
+          technicianId: {
+            in: technicianIds,
+          },
+
+          callId: {
+            not: callId,
+          },
+        },
+        select: {
+          callId: true,
+          technicianId: true,
+        },
+      });
+
+      const assistantCallIds = [
+        ...new Set(assistantAssignments.map((assignment) => assignment.callId)),
+      ];
+
+      const activeAssistantCalls =
+        assistantCallIds.length > 0
+          ? await tx.call.findMany({
+              where: {
+                id: {
+                  in: assistantCallIds,
+                },
+
+                status: {
+                  in: [...activeStatuses],
+                },
+              },
+              select: {
+                id: true,
+                title: true,
+              },
+            })
+          : [];
+
+      const activeAssistantCallIds = new Set(
+        activeAssistantCalls.map((activeCall) => activeCall.id),
+      );
+
+      const unavailableTechnicianIds = new Set<string>();
+
+      callsAsResponsible.forEach((activeCall) => {
+        if (activeCall.assignedToId) {
+          unavailableTechnicianIds.add(activeCall.assignedToId);
+        }
+      });
+
+      assistantAssignments.forEach((assignment) => {
+        if (activeAssistantCallIds.has(assignment.callId)) {
+          unavailableTechnicianIds.add(assignment.technicianId);
+        }
+      });
+
+      if (unavailableTechnicianIds.size > 0) {
+        const unavailableNames = teamMembers
+          .filter((member) => unavailableTechnicianIds.has(member.technicianId))
+          .map((member) => member.technician.name);
+
+        throw new AppError(
+          409,
+          unavailableNames.length === 1
+            ? `${unavailableNames[0]} não está mais disponível. Atualize a equipe antes de confirmar.`
+            : `Os técnicos ${unavailableNames.join(", ")} não estão mais disponíveis. Atualize a equipe antes de confirmar.`,
+        );
+      }
+
+      await tx.callAssistant.deleteMany({
+        where: {
+          callId,
+        },
+      });
+
+      if (assistantMembers.length > 0) {
+        await tx.callAssistant.createMany({
+          data: assistantMembers.map((member) => ({
+            callId,
+            technicianId: member.technicianId,
+            addedById: confirmedById,
+          })),
+        });
+      }
+
+      const updatedCall = await tx.call.update({
+        where: {
+          id: callId,
+        },
+        data: {
+          assignedToId: responsibleMember.technicianId,
+          status: "READY",
+        },
+        select: {
+          id: true,
+          title: true,
+          protocol: true,
+          status: true,
+
+          assignedTo: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      const updatedPlanning = await tx.callPlanning.update({
+        where: {
+          id: planning.id,
+        },
+        data: {
+          status: "CONFIRMED",
+          confirmedById,
+          confirmedAt: new Date(),
+        },
+        select: {
+          id: true,
+          status: true,
+          confirmedAt: true,
+          updatedAt: true,
+
+          confirmedBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      return {
+        call: {
+          ...updatedCall,
+          assistants: assistantMembers.map((member) => member.technician),
+        },
+
+        planning: updatedPlanning,
+      };
+    });
+  };
+
   listAllPlannings = async () => {
     const plannings = await prisma.callPlanning.findMany({
       orderBy: {
