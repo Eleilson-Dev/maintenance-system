@@ -41,7 +41,7 @@ export class VerifyToken {
         throw new AppError(401, "Invalid session");
       }
 
-      res.locals.user = user;
+      console.log(user.id);
 
       return next();
     } catch (error) {

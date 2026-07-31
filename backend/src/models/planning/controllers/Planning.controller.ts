@@ -14,6 +14,7 @@ export class PlanningController {
 
   updatePlanningTeam = async (req: Request, res: Response) => {
     const { callId } = req.params;
+    const updatedById = res.locals.user.id;
 
     if (typeof callId !== "string") {
       throw new AppError(400, "O ID do chamado é inválido.");
@@ -24,6 +25,7 @@ export class PlanningController {
         callId,
       },
       req.body,
+      updatedById,
     );
 
     return res.status(200).json({

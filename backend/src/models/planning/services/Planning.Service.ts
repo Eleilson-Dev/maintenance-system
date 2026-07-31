@@ -14,6 +14,7 @@ export class PlanningService {
   updatePlanningTeam = async (
     { callId }: PlanningParamsDTO,
     data: UpdatePlanningTeamDTO,
+    updatedById: string,
   ) => {
     const call = await prisma.call.findUnique({
       where: {
@@ -214,6 +215,24 @@ export class PlanningService {
           })),
         });
       }
+
+      await tx.callHistory.create({
+        data: {
+          callId,
+          userId: updatedById,
+          action: "PLANNING_UPDATED",
+          observation: `Equipe do planejamento atualizada. Responsável: ${responsible.name}. Auxiliares: ${
+            uniqueAssistantIds.length > 0
+              ? technicians
+                  .filter((technician) =>
+                    uniqueAssistantIds.includes(technician.id),
+                  )
+                  .map((technician) => technician.name)
+                  .join(", ")
+              : "Nenhum"
+          }.`,
+        },
+      });
     });
 
     const updatedPlanning = await prisma.callPlanning.findUnique({
@@ -614,6 +633,42 @@ export class PlanningService {
               email: true,
             },
           },
+        },
+      });
+
+      const assistantNames = assistantMembers.map(
+        (member) => member.technician.name,
+      );
+
+      await tx.callHistory.create({
+        data: {
+          callId,
+          userId: confirmedById,
+          action: "PLANNING_CONFIRMED",
+          observation: `Planejamento confirmado. Responsável: ${
+            responsibleMember.technician.name
+          }. Auxiliares: ${
+            assistantNames.length > 0 ? assistantNames.join(", ") : "Nenhum"
+          }.`,
+        },
+      });
+
+      await tx.callHistory.create({
+        data: {
+          callId,
+          userId: confirmedById,
+          action: "ASSIGNED",
+          observation: `Responsável definido: ${responsibleMember.technician.name}.`,
+        },
+      });
+
+      await tx.callHistory.create({
+        data: {
+          callId,
+          userId: confirmedById,
+          action: "READY_FOR_EXECUTION",
+          observation:
+            "Chamado liberado para execução e aguardando início do responsável.",
         },
       });
 
