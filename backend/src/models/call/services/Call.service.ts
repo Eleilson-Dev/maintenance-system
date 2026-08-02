@@ -394,7 +394,6 @@ export class CallService {
         in: [
           "OPEN",
           "IN_PROGRESS",
-          "PLANNING",
           "READY",
           "WAITING_PARTS",
           "WAITING_APPROVAL",

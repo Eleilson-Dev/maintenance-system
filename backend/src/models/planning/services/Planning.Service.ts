@@ -5,6 +5,7 @@ import { prisma } from "../../../config/db/database.js";
 import { AppError } from "../../../shared/errors/AppError.js";
 
 import {
+  ListPlanningsParamsDTO,
   PlanningParamsDTO,
   UpdatePlanningTeamDTO,
 } from "../schemas/Planning.schema.js";
@@ -683,22 +684,126 @@ export class PlanningService {
     });
   };
 
-  listAllPlannings = async () => {
-    const plannings = await prisma.callPlanning.findMany({
-      orderBy: {
-        updatedAt: "desc",
+  listAllPlannings = async ({
+    page,
+    limit,
+    search,
+  }: ListPlanningsParamsDTO) => {
+    const normalizedSearch = search?.trim() || undefined;
+
+    const where = {
+      status: "DRAFT" as const,
+
+      call: {
+        is: {
+          status: "PLANNING" as const,
+
+          ...(normalizedSearch
+            ? {
+                OR: [
+                  {
+                    title: {
+                      contains: normalizedSearch,
+                      mode: "insensitive" as const,
+                    },
+                  },
+
+                  {
+                    openedBy: {
+                      is: {
+                        name: {
+                          contains: normalizedSearch,
+                          mode: "insensitive" as const,
+                        },
+                      },
+                    },
+                  },
+                ],
+              }
+            : {}),
+        },
       },
+
+      ...(normalizedSearch
+        ? {
+            OR: [
+              {
+                call: {
+                  is: {
+                    title: {
+                      contains: normalizedSearch,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                },
+              },
+
+              {
+                createdBy: {
+                  is: {
+                    name: {
+                      contains: normalizedSearch,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                },
+              },
+
+              {
+                teamMembers: {
+                  some: {
+                    technician: {
+                      is: {
+                        name: {
+                          contains: normalizedSearch,
+                          mode: "insensitive" as const,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+
+    const skip = (page - 1) * limit;
+
+    const total = await prisma.callPlanning.count({
+      where,
+    });
+
+    const plannings = await prisma.callPlanning.findMany({
+      where,
+
+      skip,
+      take: limit,
+
+      orderBy: [
+        {
+          updatedAt: "desc",
+        },
+        {
+          id: "desc",
+        },
+      ],
+
       select: {
         id: true,
         status: true,
+
         plannedStartAt: true,
         plannedEndAt: true,
+
         instructions: true,
         observations: true,
+
         requiresShutdown: true,
         requiresPermit: true,
         requiresParts: true,
         requiresTools: true,
+
         confirmedAt: true,
         createdAt: true,
         updatedAt: true,
@@ -757,7 +862,7 @@ export class PlanningService {
       },
     });
 
-    return plannings.map((planning) => {
+    const formattedPlannings = plannings.map((planning) => {
       const responsibleMember = planning.teamMembers.find(
         (member) => member.role === "RESPONSIBLE",
       );
@@ -797,5 +902,13 @@ export class PlanningService {
         updatedAt: planning.updatedAt,
       };
     });
+
+    return {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      plannings: formattedPlannings,
+    };
   };
 }

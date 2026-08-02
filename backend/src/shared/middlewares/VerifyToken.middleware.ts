@@ -31,6 +31,10 @@ export class VerifyToken {
 
       const decoded = jwt.verify(token, secret) as TokenPayload;
 
+      if (!decoded.userId) {
+        throw new AppError(401, "Token user is invalid");
+      }
+
       const user = await prisma.user.findUnique({
         where: {
           id: decoded.userId,
@@ -41,7 +45,7 @@ export class VerifyToken {
         throw new AppError(401, "Invalid session");
       }
 
-      console.log(user.id);
+      res.locals.user = user;
 
       return next();
     } catch (error) {

@@ -4,6 +4,7 @@ import { inject, injectable } from "tsyringe";
 import { AppError } from "../../../shared/errors/AppError.js";
 
 import type { PlanningService } from "../services/Planning.Service.js";
+import { listPlanningsQuerySchema } from "../schemas/Planning.schema.js";
 
 @injectable()
 export class PlanningController {
@@ -61,11 +62,10 @@ export class PlanningController {
   };
 
   listAllPlannings = async (req: Request, res: Response) => {
-    const plannings = await this.planningService.listAllPlannings();
+    const query = listPlanningsQuerySchema.parse(req.query);
 
-    return res.status(200).json({
-      total: plannings.length,
-      plannings,
-    });
+    const result = await this.planningService.listAllPlannings(query);
+
+    return res.status(200).json(result);
   };
 }
