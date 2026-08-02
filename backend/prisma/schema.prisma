@@ -506,6 +506,7 @@ model CallHistory {
   id          String            @id @default(uuid())
   action      CallHistoryAction
   observation String?
+  metadata    Json?
   callId      String
   call        Call              @relation(fields: [callId], references: [id])
   userId      String
