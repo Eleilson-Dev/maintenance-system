@@ -501,4 +501,258 @@ export class CallService {
       totalPages: Math.ceil(total / limit),
     };
   };
+
+  listTechnicianServices = async (technicianId: string) => {
+    const participationWhere: Prisma.CallWhereInput = {
+      OR: [
+        {
+          assignedToId: technicianId,
+        },
+
+        {
+          assistants: {
+            some: {
+              technicianId,
+            },
+          },
+        },
+      ],
+    };
+
+    const callSelect = {
+      id: true,
+      protocol: true,
+      title: true,
+      description: true,
+
+      status: true,
+      priority: true,
+      serviceType: true,
+      requiredLevel: true,
+
+      createdAt: true,
+      updatedAt: true,
+
+      location: {
+        select: {
+          id: true,
+          name: true,
+
+          parent: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      },
+
+      callAreas: {
+        select: {
+          area: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      },
+
+      assignedTo: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          level: true,
+        },
+      },
+
+      assistants: {
+        select: {
+          technician: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              level: true,
+            },
+          },
+        },
+      },
+    } satisfies Prisma.CallSelect;
+
+    const [
+      inProgressService,
+      readyService,
+      pausedServices,
+      completedServices,
+      pausedCount,
+      completedCount,
+    ] = await Promise.all([
+      /*
+       * Atendimento já iniciado.
+       *
+       * Tem prioridade sobre qualquer chamado READY.
+       */
+      prisma.call.findFirst({
+        where: {
+          ...participationWhere,
+
+          status: "IN_PROGRESS",
+        },
+
+        select: callSelect,
+
+        orderBy: {
+          updatedAt: "desc",
+        },
+      }),
+
+      /*
+       * Chamado confirmado e pronto para iniciar.
+       *
+       * Só será usado se não houver nenhum IN_PROGRESS.
+       */
+      prisma.call.findFirst({
+        where: {
+          ...participationWhere,
+
+          status: "READY",
+        },
+
+        select: callSelect,
+
+        orderBy: {
+          updatedAt: "desc",
+        },
+      }),
+
+      /*
+       * Prévia dos chamados pausados.
+       */
+      prisma.call.findMany({
+        where: {
+          ...participationWhere,
+
+          status: "WAITING_PARTS",
+        },
+
+        select: callSelect,
+
+        orderBy: {
+          updatedAt: "desc",
+        },
+
+        take: 2,
+      }),
+
+      /*
+       * Prévia dos últimos chamados concluídos.
+       */
+      prisma.call.findMany({
+        where: {
+          ...participationWhere,
+
+          status: "COMPLETED",
+        },
+
+        select: callSelect,
+
+        orderBy: {
+          updatedAt: "desc",
+        },
+
+        take: 3,
+      }),
+
+      /*
+       * Total real de chamados pausados.
+       */
+      prisma.call.count({
+        where: {
+          ...participationWhere,
+
+          status: "WAITING_PARTS",
+        },
+      }),
+
+      /*
+       * Total real de chamados concluídos.
+       */
+      prisma.call.count({
+        where: {
+          ...participationWhere,
+
+          status: "COMPLETED",
+        },
+      }),
+    ]);
+
+    /*
+     * Se existir IN_PROGRESS, ele sempre será o atendimento atual.
+     *
+     * O READY só aparece quando ainda não existe atendimento iniciado.
+     */
+    const currentService = inProgressService ?? readyService;
+
+    const formatCall = (
+      call:
+        | typeof currentService
+        | (typeof pausedServices)[number]
+        | (typeof completedServices)[number]
+        | null,
+    ) => {
+      if (!call) {
+        return null;
+      }
+
+      const participation =
+        call.assignedTo?.id === technicianId
+          ? ("RESPONSIBLE" as const)
+          : ("ASSISTANT" as const);
+
+      return {
+        id: call.id,
+        protocol: call.protocol,
+        title: call.title,
+        description: call.description,
+
+        status: call.status,
+        priority: call.priority,
+        serviceType: call.serviceType,
+        requiredLevel: call.requiredLevel,
+
+        participation,
+
+        location: call.location,
+
+        areas: call.callAreas.map((callArea) => callArea.area),
+
+        responsible: call.assignedTo,
+
+        assistants: call.assistants.map((assistant) => assistant.technician),
+
+        createdAt: call.createdAt,
+        updatedAt: call.updatedAt,
+      };
+    };
+
+    return {
+      currentService: formatCall(currentService),
+
+      pausedServices: pausedServices
+        .map((call) => formatCall(call))
+        .filter((call) => call !== null),
+
+      completedServices: completedServices
+        .map((call) => formatCall(call))
+        .filter((call) => call !== null),
+
+      counts: {
+        current: currentService ? 1 : 0,
+        paused: pausedCount,
+        completed: completedCount,
+      },
+    };
+  };
 }

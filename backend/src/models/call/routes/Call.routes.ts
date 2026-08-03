@@ -35,10 +35,6 @@ callRouter.get("/calls/list", VerifyToken.execute, (req, res) =>
   callController.getCalls(req, res),
 );
 
-callRouter.get("/:id", callController.getCallById);
-
-callRouter.patch("/:id/assign", callController.assignTechnician);
-
-callRouter.patch("/:id/status", callController.updateCallStatus);
-
-callRouter.patch("/:id/complete", callController.completeCall);
+callRouter.get("/call/technician/services", VerifyToken.execute, (req, res) =>
+  callController.listTechnicianServices(req, res),
+);

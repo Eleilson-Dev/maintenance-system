@@ -64,11 +64,12 @@ export class CallController {
     return res.status(200).json(calls);
   };
 
-  getCallById = async (req: Request, res: Response) => {};
+  listTechnicianServices = async (req: Request, res: Response) => {
+    const technicianId = res.locals.user.id as string;
 
-  assignTechnician = async (req: Request, res: Response) => {};
+    const services =
+      await this.callService.listTechnicianServices(technicianId);
 
-  updateCallStatus = async (req: Request, res: Response) => {};
-
-  completeCall = async (req: Request, res: Response) => {};
+    return res.status(200).json(services);
+  };
 }

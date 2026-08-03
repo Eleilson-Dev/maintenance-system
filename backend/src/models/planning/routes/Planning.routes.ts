@@ -35,3 +35,10 @@ planningRouter.get(
   VerifyAdmin.execute,
   (req, res) => planningController.listAllPlannings(req, res),
 );
+
+planningRouter.get(
+  "/call/:callId/planning",
+  VerifyToken.execute,
+  VerifyAdmin.execute,
+  (req, res) => planningController.findPlanningDetails(req, res),
+);

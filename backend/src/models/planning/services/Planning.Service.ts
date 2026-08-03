@@ -815,6 +815,17 @@ export class PlanningService {
             status: true,
             priority: true,
             serviceType: true,
+
+            callAreas: {
+              select: {
+                area: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
+              },
+            },
           },
         },
 
@@ -888,7 +899,15 @@ export class PlanningService {
           requiresTools: planning.requiresTools,
         },
 
-        call: planning.call,
+        call: {
+          id: planning.call.id,
+          title: planning.call.title,
+          status: planning.call.status,
+          priority: planning.call.priority,
+          serviceType: planning.call.serviceType,
+
+          areas: planning.call.callAreas.map((callArea) => callArea.area),
+        },
 
         createdBy: planning.createdBy,
         confirmedBy: planning.confirmedBy,
@@ -909,6 +928,392 @@ export class PlanningService {
       limit,
       totalPages: Math.ceil(total / limit),
       plannings: formattedPlannings,
+    };
+  };
+
+  findPlanningDetails = async ({ callId }: PlanningParamsDTO) => {
+    const planning = await prisma.callPlanning.findUnique({
+      where: {
+        callId,
+      },
+
+      select: {
+        id: true,
+        status: true,
+
+        plannedStartAt: true,
+        plannedEndAt: true,
+
+        instructions: true,
+        observations: true,
+
+        requiresShutdown: true,
+        requiresPermit: true,
+        requiresParts: true,
+        requiresTools: true,
+
+        confirmedAt: true,
+        createdAt: true,
+        updatedAt: true,
+
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+
+        confirmedBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+
+        call: {
+          select: {
+            id: true,
+            protocol: true,
+            title: true,
+            description: true,
+
+            status: true,
+            priority: true,
+            serviceType: true,
+
+            openedById: true,
+            createdAt: true,
+            updatedAt: true,
+
+            location: {
+              select: {
+                id: true,
+                name: true,
+
+                parent: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+
+            callAreas: {
+              select: {
+                areaId: true,
+
+                area: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+
+        teamMembers: {
+          select: {
+            id: true,
+            role: true,
+            technicianId: true,
+
+            technician: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+
+                role: true,
+                isTechnician: true,
+
+                userAreas: {
+                  select: {
+                    areaId: true,
+
+                    area: {
+                      select: {
+                        id: true,
+                        name: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!planning) {
+      throw new AppError(
+        404,
+        "O planejamento deste chamado não foi encontrado.",
+      );
+    }
+
+    if (planning.call.status !== "PLANNING") {
+      throw new AppError(400, "Este chamado não está mais em planejamento.");
+    }
+
+    if (planning.status !== "DRAFT") {
+      throw new AppError(
+        400,
+        "Somente planejamentos em andamento podem ser editados.",
+      );
+    }
+
+    if (planning.call.callAreas.length === 0) {
+      throw new AppError(400, "O chamado não possui áreas vinculadas.");
+    }
+
+    const technicians = await prisma.user.findMany({
+      where: {
+        role: "TECHNICIAN",
+        isTechnician: true,
+
+        id: {
+          not: planning.call.openedById,
+        },
+      },
+
+      orderBy: {
+        name: "asc",
+      },
+
+      select: {
+        id: true,
+        name: true,
+        email: true,
+
+        userAreas: {
+          select: {
+            areaId: true,
+
+            area: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const technicianIds = technicians.map((technician) => technician.id);
+
+    const activeStatuses = [
+      "OPEN",
+      "READY",
+      "IN_PROGRESS",
+      "WAITING_PARTS",
+      "HELP_REQUESTED",
+    ] as const;
+
+    const callsAsResponsible =
+      technicianIds.length > 0
+        ? await prisma.call.findMany({
+            where: {
+              id: {
+                not: callId,
+              },
+
+              assignedToId: {
+                in: technicianIds,
+              },
+
+              status: {
+                in: [...activeStatuses],
+              },
+            },
+
+            select: {
+              id: true,
+              protocol: true,
+              title: true,
+              status: true,
+              assignedToId: true,
+            },
+          })
+        : [];
+
+    const assistantAssignments =
+      technicianIds.length > 0
+        ? await prisma.callAssistant.findMany({
+            where: {
+              technicianId: {
+                in: technicianIds,
+              },
+
+              callId: {
+                not: callId,
+              },
+            },
+
+            select: {
+              callId: true,
+              technicianId: true,
+            },
+          })
+        : [];
+
+    const assistantCallIds = [
+      ...new Set(assistantAssignments.map((assignment) => assignment.callId)),
+    ];
+
+    const activeAssistantCalls =
+      assistantCallIds.length > 0
+        ? await prisma.call.findMany({
+            where: {
+              id: {
+                in: assistantCallIds,
+              },
+
+              status: {
+                in: [...activeStatuses],
+              },
+            },
+
+            select: {
+              id: true,
+              protocol: true,
+              title: true,
+              status: true,
+            },
+          })
+        : [];
+
+    const activeAssistantCallMap = new Map(
+      activeAssistantCalls.map((activeCall) => [activeCall.id, activeCall]),
+    );
+
+    const responsibleCallByTechnician = new Map(
+      callsAsResponsible
+        .filter(
+          (
+            activeCall,
+          ): activeCall is typeof activeCall & {
+            assignedToId: string;
+          } => Boolean(activeCall.assignedToId),
+        )
+        .map((activeCall) => [activeCall.assignedToId, activeCall]),
+    );
+
+    const assistantCallByTechnician = new Map<
+      string,
+      (typeof activeAssistantCalls)[number]
+    >();
+
+    assistantAssignments.forEach((assignment) => {
+      const activeCall = activeAssistantCallMap.get(assignment.callId);
+
+      if (activeCall) {
+        assistantCallByTechnician.set(assignment.technicianId, activeCall);
+      }
+    });
+
+    const selectedMemberByTechnicianId = new Map(
+      planning.teamMembers.map((member) => [member.technicianId, member]),
+    );
+
+    const availableTechnicians = technicians.map((technician) => {
+      const responsibleCall = responsibleCallByTechnician.get(technician.id);
+
+      const assistantCall = assistantCallByTechnician.get(technician.id);
+
+      const activeCall = responsibleCall ?? assistantCall ?? null;
+
+      const selectedMember = selectedMemberByTechnicianId.get(technician.id);
+
+      return {
+        id: technician.id,
+        name: technician.name,
+        email: technician.email,
+
+        userAreas: technician.userAreas,
+
+        isAvailable: activeCall === null,
+
+        unavailableReason: activeCall
+          ? responsibleCall
+            ? "RESPONSIBLE_IN_ANOTHER_CALL"
+            : "ASSISTANT_IN_ANOTHER_CALL"
+          : null,
+
+        activeCall: activeCall
+          ? {
+              id: activeCall.id,
+              protocol: activeCall.protocol,
+              title: activeCall.title,
+              status: activeCall.status,
+            }
+          : null,
+
+        planningRole: selectedMember?.role ?? null,
+      };
+    });
+
+    const responsibleMember = planning.teamMembers.find(
+      (member) => member.role === "RESPONSIBLE",
+    );
+
+    const assistantMembers = planning.teamMembers.filter(
+      (member) => member.role === "ASSISTANT",
+    );
+
+    return {
+      id: planning.id,
+      status: planning.status,
+
+      plannedStartAt: planning.plannedStartAt,
+      plannedEndAt: planning.plannedEndAt,
+
+      instructions: planning.instructions,
+      observations: planning.observations,
+
+      requirements: {
+        requiresShutdown: planning.requiresShutdown,
+        requiresPermit: planning.requiresPermit,
+        requiresParts: planning.requiresParts,
+        requiresTools: planning.requiresTools,
+      },
+
+      call: {
+        id: planning.call.id,
+        protocol: planning.call.protocol,
+        title: planning.call.title,
+        description: planning.call.description,
+
+        status: planning.call.status,
+        priority: planning.call.priority,
+        serviceType: planning.call.serviceType,
+
+        location: planning.call.location,
+
+        areas: planning.call.callAreas.map((callArea) => callArea.area),
+
+        createdAt: planning.call.createdAt,
+        updatedAt: planning.call.updatedAt,
+      },
+
+      createdBy: planning.createdBy,
+      confirmedBy: planning.confirmedBy,
+      confirmedAt: planning.confirmedAt,
+
+      responsible: responsibleMember?.technician ?? null,
+
+      assistants: assistantMembers.map((member) => member.technician),
+
+      technicians: availableTechnicians,
+
+      createdAt: planning.createdAt,
+      updatedAt: planning.updatedAt,
     };
   };
 }

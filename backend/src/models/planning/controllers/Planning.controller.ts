@@ -68,4 +68,20 @@ export class PlanningController {
 
     return res.status(200).json(result);
   };
+
+  findPlanningDetails = async (req: Request, res: Response) => {
+    const { callId } = req.params;
+
+    if (typeof callId !== "string") {
+      throw new AppError(400, "O ID do chamado é inválido.");
+    }
+
+    const planning = await this.planningService.findPlanningDetails({
+      callId,
+    });
+
+    return res.status(200).json({
+      planning,
+    });
+  };
 }
