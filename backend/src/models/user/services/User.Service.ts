@@ -73,6 +73,17 @@ export class UserService {
           level: true,
           createdAt: true,
           updatedAt: true,
+
+          userAreas: {
+            select: {
+              area: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
         },
       });
 
@@ -134,8 +145,22 @@ export class UserService {
         })),
       ];
 
+      const areas = user.userAreas.map((userArea) => ({
+        id: userArea.area.id,
+        name: userArea.area.name,
+      }));
+
       return {
-        ...user,
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isTechnician: user.isTechnician,
+        level: user.level,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+
+        areas,
 
         hasActiveCall: activeCalls.length > 0,
 
@@ -151,6 +176,7 @@ export class UserService {
       throw new AppError(400, "Error while trying to find the user.");
     }
   };
+
   listAllUsers = async () => {
     return await prisma.user.findMany({
       include: {
