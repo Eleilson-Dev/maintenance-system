@@ -72,4 +72,15 @@ export class CallController {
 
     return res.status(200).json(services);
   };
+
+  startCall = async (req: Request, res: Response) => {
+    const technicianId = res.locals.user.id as string;
+    const callId = req.params.callId as string;
+
+    const call = await this.callService.startCall(callId, technicianId);
+
+    io.emit("call_updated", call);
+
+    return res.status(200).json(call);
+  };
 }

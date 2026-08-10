@@ -4,7 +4,10 @@ import { inject, injectable } from "tsyringe";
 import { AppError } from "../../../shared/errors/AppError.js";
 
 import type { PlanningService } from "../services/Planning.Service.js";
+
 import { listPlanningsQuerySchema } from "../schemas/Planning.schema.js";
+
+import { io } from "../../../server.js";
 
 @injectable()
 export class PlanningController {
@@ -15,6 +18,7 @@ export class PlanningController {
 
   updatePlanningTeam = async (req: Request, res: Response) => {
     const { callId } = req.params;
+
     const updatedById = res.locals.user.id;
 
     if (typeof callId !== "string") {
@@ -31,6 +35,7 @@ export class PlanningController {
 
     return res.status(200).json({
       message: "Equipe do planejamento atualizada com sucesso.",
+
       planning,
     });
   };
@@ -55,8 +60,27 @@ export class PlanningController {
       confirmedById,
     );
 
+    /*
+     * Atualiza em tempo real as telas que
+     * estejam acompanhando os chamados.
+     */
+    io.emit("call_updated", result.call);
+
+    /*
+     * Evento específico caso futuramente
+     * queira tratar confirmação de planejamento.
+     */
+    io.emit("planning_confirmed", {
+      callId: result.call.id,
+      planningId: result.planning.id,
+
+      call: result.call,
+      planning: result.planning,
+    });
+
     return res.status(200).json({
       message: "Planejamento confirmado com sucesso.",
+
       ...result,
     });
   };

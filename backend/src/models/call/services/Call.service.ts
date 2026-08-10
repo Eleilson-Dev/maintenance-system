@@ -755,4 +755,81 @@ export class CallService {
       },
     };
   };
+
+  startCall = async (callId: string, technicianId: string) => {
+    const call = await prisma.call.findUnique({
+      where: {
+        id: callId,
+      },
+
+      select: {
+        id: true,
+        status: true,
+        assignedToId: true,
+
+        assistants: {
+          select: {
+            technicianId: true,
+          },
+        },
+      },
+    });
+
+    if (!call) {
+      throw new AppError(404, "Chamado não encontrado.");
+    }
+
+    const isParticipant =
+      call.assignedToId === technicianId ||
+      call.assistants.some(
+        (assistant) => assistant.technicianId === technicianId,
+      );
+
+    if (!isParticipant) {
+      throw new AppError(403, "Você não participa deste atendimento.");
+    }
+
+    // Se já não estiver READY, não precisa alterar nada.
+    if (call.status !== "READY") {
+      return {
+        id: call.id,
+        status: call.status,
+        started: false,
+      };
+    }
+
+    const updatedCall = await prisma.$transaction(async (tx) => {
+      const updated = await tx.call.update({
+        where: {
+          id: call.id,
+        },
+
+        data: {
+          status: "IN_PROGRESS",
+        },
+
+        select: {
+          id: true,
+          status: true,
+          updatedAt: true,
+        },
+      });
+
+      await tx.callHistory.create({
+        data: {
+          callId: call.id,
+          userId: technicianId,
+          action: "STARTED",
+          observation: "Atendimento iniciado.",
+        },
+      });
+
+      return updated;
+    });
+
+    return {
+      ...updatedCall,
+      started: true,
+    };
+  };
 }
