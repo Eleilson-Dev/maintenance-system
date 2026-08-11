@@ -832,4 +832,192 @@ export class CallService {
       started: true,
     };
   };
+
+  takeCall = async (callId: string, technicianId: string) => {
+    const technician = await prisma.user.findUnique({
+      where: {
+        id: technicianId,
+      },
+
+      select: {
+        id: true,
+        name: true,
+        isTechnician: true,
+
+        userAreas: {
+          select: {
+            areaId: true,
+          },
+        },
+      },
+    });
+
+    if (!technician) {
+      throw new AppError(404, "Técnico não encontrado.");
+    }
+
+    if (!technician.isTechnician) {
+      throw new AppError(403, "Usuário não é um técnico.");
+    }
+
+    const call = await prisma.call.findUnique({
+      where: {
+        id: callId,
+      },
+
+      select: {
+        id: true,
+        protocol: true,
+        status: true,
+        assignedToId: true,
+
+        callAreas: {
+          select: {
+            areaId: true,
+          },
+        },
+      },
+    });
+
+    if (!call) {
+      throw new AppError(404, "Chamado não encontrado.");
+    }
+
+    if (call.status !== "OPEN") {
+      throw new AppError(
+        409,
+        "Este chamado não está disponível para ser assumido.",
+      );
+    }
+
+    if (call.assignedToId) {
+      throw new AppError(409, "Este chamado já possui um técnico responsável.");
+    }
+
+    const technicianAreaIds = technician.userAreas.map(
+      (userArea) => userArea.areaId,
+    );
+
+    const belongsToCallArea = call.callAreas.some((callArea) =>
+      technicianAreaIds.includes(callArea.areaId),
+    );
+
+    if (!belongsToCallArea) {
+      throw new AppError(403, "Você não pertence à área deste chamado.");
+    }
+
+    const activeCall = await prisma.call.findFirst({
+      where: {
+        assignedToId: technicianId,
+        status: "IN_PROGRESS",
+      },
+
+      select: {
+        id: true,
+        protocol: true,
+      },
+    });
+
+    if (activeCall) {
+      throw new AppError(
+        409,
+        `Você já possui um atendimento em andamento: ${activeCall.protocol}.`,
+      );
+    }
+
+    const updatedCall = await prisma.$transaction(async (tx) => {
+      const result = await tx.call.updateMany({
+        where: {
+          id: callId,
+          status: "OPEN",
+          assignedToId: null,
+        },
+
+        data: {
+          assignedToId: technicianId,
+          status: "IN_PROGRESS",
+        },
+      });
+
+      if (result.count === 0) {
+        throw new AppError(
+          409,
+          "Este chamado já foi assumido por outro técnico.",
+        );
+      }
+
+      await tx.callHistory.create({
+        data: {
+          callId,
+          userId: technicianId,
+          action: "STARTED",
+          observation: `${technician.name} assumiu e iniciou o atendimento.`,
+        },
+      });
+
+      const updatedCall = await tx.call.findUnique({
+        where: {
+          id: callId,
+        },
+
+        select: {
+          id: true,
+          protocol: true,
+          title: true,
+          status: true,
+          priority: true,
+          serviceType: true,
+          requiredLevel: true,
+          description: true,
+          createdAt: true,
+          updatedAt: true,
+
+          assignedTo: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              level: true,
+            },
+          },
+
+          callAreas: {
+            select: {
+              area: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+
+          location: {
+            select: {
+              id: true,
+              name: true,
+
+              parent: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!updatedCall) {
+        throw new AppError(
+          500,
+          "Chamado assumido, mas não foi possível carregar os dados.",
+        );
+      }
+
+      return updatedCall;
+    });
+
+    return updatedCall;
+  };
 }

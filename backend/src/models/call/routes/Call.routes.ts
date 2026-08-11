@@ -42,3 +42,7 @@ callRouter.get("/call/technician/services", VerifyToken.execute, (req, res) =>
 callRouter.patch("/call/:callId/start", VerifyToken.execute, (req, res) =>
   callController.startCall(req, res),
 );
+
+callRouter.patch("/call/:callId/take", VerifyToken.execute, (req, res) =>
+  callController.takeCall(req, res),
+);
