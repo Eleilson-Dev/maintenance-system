@@ -441,15 +441,20 @@ model HelpRequest {
 }
 
 model CallAttachment {
-  id           String         @id @default(uuid())
-  callId       String
-  call         Call           @relation(fields: [callId], references: [id])
+  id String @id @default(uuid())
+
+  callId String
+  call   Call   @relation(fields: [callId], references: [id], onDelete: Cascade)
+
   uploadedById String
-  uploadedBy   User           @relation(fields: [uploadedById], references: [id])
-  fileName     String
-  fileUrl      String
-  type         AttachmentType
-  createdAt    DateTime       @default(now())
+  uploadedBy   User   @relation(fields: [uploadedById], references: [id])
+
+  fileName   String
+  storageKey String         @unique
+  mimeType   String?
+  type       AttachmentType
+
+  createdAt DateTime @default(now())
 
   @@index([callId])
   @@index([uploadedById])

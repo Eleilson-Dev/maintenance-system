@@ -1,20 +1,47 @@
+import { randomUUID } from "node:crypto";
+
 import { injectable } from "tsyringe";
+
 import { prisma } from "../../../config/db/database.js";
+
+import {
+  generateR2UploadUrl,
+  r2ObjectExists,
+} from "../../../config/storage/r2Storage.js";
+
 import { AppError } from "../../../shared/errors/AppError.js";
-import { CreateCallDTO, PreviewCallDTO } from "../schemas/Call.schema.js";
+
+import { generateProtocol } from "../../../shared/utils/generateProtocol.js";
+
+import {
+  ConfirmCallAttachmentsDTO,
+  CreateCallDTO,
+  PrepareCallAttachmentsDTO,
+  PreviewCallDTO,
+} from "../schemas/Call.schema.js";
+
 import {
   CoverageValidationResult,
   GetCallsDTO,
 } from "../types/CallValidation.types.js";
-import { generateProtocol } from "../../../shared/utils/generateProtocol.js";
+
 import { Prisma, ProtocolType } from "../../../../generated/prisma/client.js";
 
 const DEFAULT_TECHNICIAN_LEVEL = "SENIOR" as const;
+
+const MAX_CALL_ATTACHMENTS = 3;
+
+const ALLOWED_IMAGE_TYPES = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+} as const;
 
 type CoverageInput = {
   areaIds: string[];
 };
 
+type AllowedImageContentType = keyof typeof ALLOWED_IMAGE_TYPES;
 @injectable()
 export class CallService {
   previewCall = async (callData: PreviewCallDTO) => {
@@ -753,6 +780,166 @@ export class CallService {
         paused: pausedCount,
         completed: completedCount,
       },
+    };
+  };
+
+  prepareCallAttachments = async (
+    callId: string,
+    userId: string,
+    data: PrepareCallAttachmentsDTO,
+  ) => {
+    const { files } = data;
+
+    const call = await prisma.call.findUnique({
+      where: {
+        id: callId,
+      },
+
+      select: {
+        id: true,
+        openedById: true,
+
+        _count: {
+          select: {
+            attachments: true,
+          },
+        },
+      },
+    });
+
+    if (!call) {
+      throw new AppError(404, "Chamado não encontrado.");
+    }
+
+    if (call.openedById !== userId) {
+      throw new AppError(
+        403,
+        "Você não pode adicionar imagens a este chamado.",
+      );
+    }
+
+    if (call._count.attachments + files.length > MAX_CALL_ATTACHMENTS) {
+      throw new AppError(
+        400,
+        `Este chamado pode possuir no máximo ${MAX_CALL_ATTACHMENTS} imagens.`,
+      );
+    }
+
+    const uploads = await Promise.all(
+      files.map(async (file) => {
+        const contentType = file.contentType as AllowedImageContentType;
+
+        const extension = ALLOWED_IMAGE_TYPES[contentType];
+
+        const storageKey = `calls/${callId}/${randomUUID()}.${extension}`;
+
+        const uploadUrl = await generateR2UploadUrl({
+          key: storageKey,
+          contentType,
+        });
+
+        return {
+          fileName: file.fileName,
+          contentType,
+          storageKey,
+          uploadUrl,
+        };
+      }),
+    );
+
+    return {
+      callId,
+      uploads,
+    };
+  };
+
+  confirmCallAttachments = async (
+    callId: string,
+    userId: string,
+    data: ConfirmCallAttachmentsDTO,
+  ) => {
+    const { files } = data;
+
+    const call = await prisma.call.findUnique({
+      where: {
+        id: callId,
+      },
+
+      select: {
+        id: true,
+        openedById: true,
+
+        _count: {
+          select: {
+            attachments: true,
+          },
+        },
+      },
+    });
+
+    if (!call) {
+      throw new AppError(404, "Chamado não encontrado.");
+    }
+
+    if (call.openedById !== userId) {
+      throw new AppError(
+        403,
+        "Você não pode adicionar imagens a este chamado.",
+      );
+    }
+
+    if (call._count.attachments + files.length > MAX_CALL_ATTACHMENTS) {
+      throw new AppError(
+        400,
+        `Este chamado pode possuir no máximo ${MAX_CALL_ATTACHMENTS} imagens.`,
+      );
+    }
+
+    for (const file of files) {
+      const expectedPrefix = `calls/${callId}/`;
+
+      if (!file.storageKey.startsWith(expectedPrefix)) {
+        throw new AppError(400, "Imagem inválida para este chamado.");
+      }
+
+      const exists = await r2ObjectExists({
+        key: file.storageKey,
+      });
+
+      if (!exists) {
+        throw new AppError(
+          400,
+          `A imagem ${file.fileName} não foi encontrada no storage.`,
+        );
+      }
+    }
+
+    await prisma.callAttachment.createMany({
+      data: files.map((file) => ({
+        callId,
+        uploadedById: userId,
+
+        fileName: file.fileName,
+        storageKey: file.storageKey,
+        mimeType: file.contentType,
+
+        type: "BEFORE",
+      })),
+    });
+
+    const attachments = await prisma.callAttachment.findMany({
+      where: {
+        callId,
+      },
+
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    return {
+      callId,
+      attachments,
     };
   };
 

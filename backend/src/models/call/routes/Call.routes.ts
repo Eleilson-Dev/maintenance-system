@@ -1,16 +1,26 @@
 import { Router } from "express";
+
 import { container } from "tsyringe";
+
 import { CallService } from "../services/Call.service.js";
+
 import { CallController } from "../controllers/Call.controller.js";
+
 import { VerifyToken } from "../../../shared/middlewares/VerifyToken.middleware.js";
+
 import { VerifyAdmin } from "../../../shared/middlewares/VerifyAdmin.middleware.js";
+
 import { ValidateBody } from "../../../shared/middlewares/ValidateBody.middleware.js";
+
 import {
+  confirmCallAttachmentsSchema,
   createAdminCallSchema,
+  prepareCallAttachmentsSchema,
   previewCallSchema,
 } from "../schemas/Call.schema.js";
 
 container.registerSingleton("CallService", CallService);
+
 const callController = container.resolve(CallController);
 
 export const callRouter = Router();
@@ -29,6 +39,20 @@ callRouter.post(
   VerifyAdmin.execute,
   ValidateBody.execute(createAdminCallSchema),
   (req, res) => callController.createAdminCall(req, res),
+);
+
+callRouter.post(
+  "/call/:callId/attachments/presign",
+  VerifyToken.execute,
+  ValidateBody.execute(prepareCallAttachmentsSchema),
+  (req, res) => callController.prepareAttachments(req, res),
+);
+
+callRouter.post(
+  "/call/:callId/attachments/confirm",
+  VerifyToken.execute,
+  ValidateBody.execute(confirmCallAttachmentsSchema),
+  (req, res) => callController.confirmAttachments(req, res),
 );
 
 callRouter.get("/calls/list", VerifyToken.execute, (req, res) =>

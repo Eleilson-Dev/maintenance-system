@@ -73,6 +73,34 @@ export class CallController {
     return res.status(200).json(services);
   };
 
+  prepareAttachments = async (req: Request, res: Response) => {
+    const userId = res.locals.user.id as string;
+
+    const callId = req.params.callId as string;
+
+    const result = await this.callService.prepareCallAttachments(
+      callId,
+      userId,
+      req.body,
+    );
+
+    return res.status(200).json(result);
+  };
+
+  confirmAttachments = async (req: Request, res: Response) => {
+    const userId = res.locals.user.id as string;
+
+    const callId = req.params.callId as string;
+
+    const result = await this.callService.confirmCallAttachments(
+      callId,
+      userId,
+      req.body,
+    );
+
+    return res.status(201).json(result);
+  };
+
   startCall = async (req: Request, res: Response) => {
     const technicianId = res.locals.user.id as string;
     const callId = req.params.callId as string;
