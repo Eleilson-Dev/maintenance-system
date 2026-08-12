@@ -1,47 +1,35 @@
-import { randomUUID } from "node:crypto";
-
 import { injectable } from "tsyringe";
-
 import { prisma } from "../../../config/db/database.js";
-
-import {
-  generateR2UploadUrl,
-  r2ObjectExists,
-} from "../../../config/storage/r2Storage.js";
-
 import { AppError } from "../../../shared/errors/AppError.js";
-
 import { generateProtocol } from "../../../shared/utils/generateProtocol.js";
-
-import {
-  ConfirmCallAttachmentsDTO,
-  CreateCallDTO,
-  PrepareCallAttachmentsDTO,
-  PreviewCallDTO,
-} from "../schemas/Call.schema.js";
+import { CreateCallDTO, PreviewCallDTO } from "../schemas/Call.schema.js";
 
 import {
   CoverageValidationResult,
   GetCallsDTO,
 } from "../types/CallValidation.types.js";
+import {
+  deleteR2Object,
+  uploadR2Object,
+} from "../../../config/storage/r2Storage.js";
 
 import { Prisma, ProtocolType } from "../../../../generated/prisma/client.js";
+import { randomUUID } from "node:crypto";
 
 const DEFAULT_TECHNICIAN_LEVEL = "SENIOR" as const;
 
 const MAX_CALL_ATTACHMENTS = 3;
 
-const ALLOWED_IMAGE_TYPES = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-} as const;
+type UploadedAttachment = {
+  fileName: string;
+  storageKey: string;
+  mimeType: string;
+};
 
 type CoverageInput = {
   areaIds: string[];
 };
 
-type AllowedImageContentType = keyof typeof ALLOWED_IMAGE_TYPES;
 @injectable()
 export class CallService {
   previewCall = async (callData: PreviewCallDTO) => {
@@ -86,7 +74,13 @@ export class CallService {
     };
   };
 
-  createAdminCall = async (userId: string, callData: CreateCallDTO) => {
+  createAdminCall = async (
+    userId: string,
+    callData: CreateCallDTO,
+    files: Express.Multer.File[],
+  ) => {
+    const uploadedKeys: string[] = [];
+
     try {
       const coverage = await this.validateCoverage(callData);
 
@@ -94,8 +88,39 @@ export class CallService {
         throw new AppError(400, coverage.message);
       }
 
+      if (files.length > MAX_CALL_ATTACHMENTS) {
+        throw new AppError(
+          400,
+          `Você pode enviar no máximo ${MAX_CALL_ATTACHMENTS} imagens.`,
+        );
+      }
+
       const requiresPlanning =
         callData.areaIds.length > 1 || callData.isPlanning;
+
+      const callId = randomUUID();
+
+      const uploadedAttachments: UploadedAttachment[] = [];
+
+      for (const file of files) {
+        const extension = file.mimetype === "image/png" ? "png" : "jpg";
+
+        const storageKey = `calls/${callId}/${randomUUID()}.${extension}`;
+
+        await uploadR2Object({
+          key: storageKey,
+          body: file.buffer,
+          contentType: file.mimetype,
+        });
+
+        uploadedKeys.push(storageKey);
+
+        uploadedAttachments.push({
+          fileName: file.originalname,
+          storageKey,
+          mimeType: file.mimetype,
+        });
+      }
 
       const createdCall = await prisma.$transaction(async (tx) => {
         const year = new Date().getFullYear();
@@ -104,11 +129,13 @@ export class CallService {
           where: {
             id: `CALL-${year}`,
           },
+
           update: {
             value: {
               increment: 1,
             },
           },
+
           create: {
             id: `CALL-${year}`,
             type: ProtocolType.CALL,
@@ -121,21 +148,34 @@ export class CallService {
 
         const call = await tx.call.create({
           data: {
+            id: callId,
+
             protocol,
+
             title: callData.title,
+
             description: callData.description,
+
             priority: callData.priority,
+
             serviceType: callData.serviceType,
+
             requiredLevel: DEFAULT_TECHNICIAN_LEVEL,
+
             locationId: callData.locationId,
+
             openedById: userId,
+
             assignedToId: null,
+
             status: requiresPlanning ? "PLANNING" : "OPEN",
           },
+
           select: {
             id: true,
           },
         });
+
         await tx.callArea.createMany({
           data: callData.areaIds.map((areaId) => ({
             callId: call.id,
@@ -143,13 +183,34 @@ export class CallService {
           })),
         });
 
+        if (uploadedAttachments.length > 0) {
+          await tx.callAttachment.createMany({
+            data: uploadedAttachments.map((attachment) => ({
+              callId: call.id,
+
+              uploadedById: userId,
+
+              fileName: attachment.fileName,
+
+              storageKey: attachment.storageKey,
+
+              mimeType: attachment.mimeType,
+
+              type: "BEFORE",
+            })),
+          });
+        }
+
         const planning = requiresPlanning
           ? await tx.callPlanning.create({
               data: {
                 callId: call.id,
+
                 createdById: userId,
+
                 status: "DRAFT",
               },
+
               select: {
                 id: true,
                 status: true,
@@ -161,8 +222,11 @@ export class CallService {
         await tx.callHistory.create({
           data: {
             callId: call.id,
+
             userId,
+
             action: "CREATED",
+
             observation: "Chamado criado.",
           },
         });
@@ -171,8 +235,11 @@ export class CallService {
           await tx.callHistory.create({
             data: {
               callId: call.id,
+
               userId,
+
               action: "PLANNING_STARTED",
+
               observation: "Planejamento do chamado iniciado.",
             },
           });
@@ -188,6 +255,7 @@ export class CallService {
         where: {
           id: createdCall.id,
         },
+
         select: {
           id: true,
           protocol: true,
@@ -198,6 +266,17 @@ export class CallService {
           serviceType: true,
           requiredLevel: true,
           createdAt: true,
+
+          attachments: {
+            select: {
+              id: true,
+              fileName: true,
+              storageKey: true,
+              mimeType: true,
+              type: true,
+              createdAt: true,
+            },
+          },
 
           location: {
             select: {
@@ -238,9 +317,20 @@ export class CallService {
 
       return {
         ...call,
+
         planning: createdCall.planning,
       };
     } catch (error) {
+      if (uploadedKeys.length > 0) {
+        await Promise.allSettled(
+          uploadedKeys.map((key) =>
+            deleteR2Object({
+              key,
+            }),
+          ),
+        );
+      }
+
       console.log("💥 Error:", error);
 
       if (error instanceof AppError) {
@@ -780,166 +870,6 @@ export class CallService {
         paused: pausedCount,
         completed: completedCount,
       },
-    };
-  };
-
-  prepareCallAttachments = async (
-    callId: string,
-    userId: string,
-    data: PrepareCallAttachmentsDTO,
-  ) => {
-    const { files } = data;
-
-    const call = await prisma.call.findUnique({
-      where: {
-        id: callId,
-      },
-
-      select: {
-        id: true,
-        openedById: true,
-
-        _count: {
-          select: {
-            attachments: true,
-          },
-        },
-      },
-    });
-
-    if (!call) {
-      throw new AppError(404, "Chamado não encontrado.");
-    }
-
-    if (call.openedById !== userId) {
-      throw new AppError(
-        403,
-        "Você não pode adicionar imagens a este chamado.",
-      );
-    }
-
-    if (call._count.attachments + files.length > MAX_CALL_ATTACHMENTS) {
-      throw new AppError(
-        400,
-        `Este chamado pode possuir no máximo ${MAX_CALL_ATTACHMENTS} imagens.`,
-      );
-    }
-
-    const uploads = await Promise.all(
-      files.map(async (file) => {
-        const contentType = file.contentType as AllowedImageContentType;
-
-        const extension = ALLOWED_IMAGE_TYPES[contentType];
-
-        const storageKey = `calls/${callId}/${randomUUID()}.${extension}`;
-
-        const uploadUrl = await generateR2UploadUrl({
-          key: storageKey,
-          contentType,
-        });
-
-        return {
-          fileName: file.fileName,
-          contentType,
-          storageKey,
-          uploadUrl,
-        };
-      }),
-    );
-
-    return {
-      callId,
-      uploads,
-    };
-  };
-
-  confirmCallAttachments = async (
-    callId: string,
-    userId: string,
-    data: ConfirmCallAttachmentsDTO,
-  ) => {
-    const { files } = data;
-
-    const call = await prisma.call.findUnique({
-      where: {
-        id: callId,
-      },
-
-      select: {
-        id: true,
-        openedById: true,
-
-        _count: {
-          select: {
-            attachments: true,
-          },
-        },
-      },
-    });
-
-    if (!call) {
-      throw new AppError(404, "Chamado não encontrado.");
-    }
-
-    if (call.openedById !== userId) {
-      throw new AppError(
-        403,
-        "Você não pode adicionar imagens a este chamado.",
-      );
-    }
-
-    if (call._count.attachments + files.length > MAX_CALL_ATTACHMENTS) {
-      throw new AppError(
-        400,
-        `Este chamado pode possuir no máximo ${MAX_CALL_ATTACHMENTS} imagens.`,
-      );
-    }
-
-    for (const file of files) {
-      const expectedPrefix = `calls/${callId}/`;
-
-      if (!file.storageKey.startsWith(expectedPrefix)) {
-        throw new AppError(400, "Imagem inválida para este chamado.");
-      }
-
-      const exists = await r2ObjectExists({
-        key: file.storageKey,
-      });
-
-      if (!exists) {
-        throw new AppError(
-          400,
-          `A imagem ${file.fileName} não foi encontrada no storage.`,
-        );
-      }
-    }
-
-    await prisma.callAttachment.createMany({
-      data: files.map((file) => ({
-        callId,
-        uploadedById: userId,
-
-        fileName: file.fileName,
-        storageKey: file.storageKey,
-        mimeType: file.contentType,
-
-        type: "BEFORE",
-      })),
-    });
-
-    const attachments = await prisma.callAttachment.findMany({
-      where: {
-        callId,
-      },
-
-      orderBy: {
-        createdAt: "asc",
-      },
-    });
-
-    return {
-      callId,
-      attachments,
     };
   };
 

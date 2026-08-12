@@ -9,6 +9,7 @@ import {
   CallStatus,
   TechnicianLevel,
 } from "../../../../generated/prisma/enums.js";
+import { createAdminCallSchema } from "../schemas/Call.schema.js";
 
 @injectable()
 export class CallController {
@@ -24,9 +25,32 @@ export class CallController {
   };
 
   createAdminCall = async (req: Request, res: Response) => {
-    const userId = res.locals.user.id;
+    const userId = res.locals.user.id as string;
 
-    const newCall = await this.callService.createAdminCall(userId, req.body);
+    const files = (req.files as Express.Multer.File[]) ?? [];
+
+    const parsedBody = createAdminCallSchema.parse({
+      ...req.body,
+
+      areaIds:
+        typeof req.body.areaIds === "string"
+          ? JSON.parse(req.body.areaIds)
+          : req.body.areaIds,
+
+      assistantIds:
+        typeof req.body.assistantIds === "string"
+          ? JSON.parse(req.body.assistantIds)
+          : [],
+
+      isPlanning:
+        req.body.isPlanning === "true" || req.body.isPlanning === true,
+    });
+
+    const newCall = await this.callService.createAdminCall(
+      userId,
+      parsedBody,
+      files,
+    );
 
     io.emit("call_created", newCall);
 
@@ -71,34 +95,6 @@ export class CallController {
       await this.callService.listTechnicianServices(technicianId);
 
     return res.status(200).json(services);
-  };
-
-  prepareAttachments = async (req: Request, res: Response) => {
-    const userId = res.locals.user.id as string;
-
-    const callId = req.params.callId as string;
-
-    const result = await this.callService.prepareCallAttachments(
-      callId,
-      userId,
-      req.body,
-    );
-
-    return res.status(200).json(result);
-  };
-
-  confirmAttachments = async (req: Request, res: Response) => {
-    const userId = res.locals.user.id as string;
-
-    const callId = req.params.callId as string;
-
-    const result = await this.callService.confirmCallAttachments(
-      callId,
-      userId,
-      req.body,
-    );
-
-    return res.status(201).json(result);
   };
 
   startCall = async (req: Request, res: Response) => {
