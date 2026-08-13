@@ -16,7 +16,9 @@ const callBaseSchema = z.object({
     .transform((value) => value || undefined),
 
   priority: z.nativeEnum(CallPriority),
+
   serviceType: z.nativeEnum(ServiceType),
+
   requiredLevel: z.nativeEnum(TechnicianLevel).optional(),
 
   locationId: z.uuid(),

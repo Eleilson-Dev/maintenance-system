@@ -3,6 +3,7 @@ import { prisma } from "../../../config/db/database.js";
 import { AppError } from "../../../shared/errors/AppError.js";
 import { generateProtocol } from "../../../shared/utils/generateProtocol.js";
 import { CreateCallDTO, PreviewCallDTO } from "../schemas/Call.schema.js";
+import { generateR2ReadUrl } from "../../../config/storage/r2Storage.js";
 
 import {
   CoverageValidationResult,
@@ -13,7 +14,11 @@ import {
   uploadR2Object,
 } from "../../../config/storage/r2Storage.js";
 
-import { Prisma, ProtocolType } from "../../../../generated/prisma/client.js";
+import {
+  PlanningStatus,
+  Prisma,
+  ProtocolType,
+} from "../../../../generated/prisma/client.js";
 import { randomUUID } from "node:crypto";
 
 const DEFAULT_TECHNICIAN_LEVEL = "SENIOR" as const;
@@ -28,6 +33,16 @@ type UploadedAttachment = {
 
 type CoverageInput = {
   areaIds: string[];
+};
+
+type CreatedCallResult = {
+  id: string;
+
+  planning: {
+    id: string;
+    status: PlanningStatus;
+    createdAt: Date;
+  } | null;
 };
 
 @injectable()
@@ -122,134 +137,135 @@ export class CallService {
         });
       }
 
-      const createdCall = await prisma.$transaction(async (tx) => {
-        const year = new Date().getFullYear();
+      const createdCall: CreatedCallResult = await prisma.$transaction(
+        async (tx) => {
+          const year = new Date().getFullYear();
 
-        const counter = await tx.protocolCounter.upsert({
-          where: {
-            id: `CALL-${year}`,
-          },
-
-          update: {
-            value: {
-              increment: 1,
+          const counter = await tx.protocolCounter.upsert({
+            where: {
+              id: `CALL-${year}`,
             },
-          },
 
-          create: {
-            id: `CALL-${year}`,
-            type: ProtocolType.CALL,
-            year,
-            value: 1,
-          },
-        });
+            update: {
+              value: {
+                increment: 1,
+              },
+            },
 
-        const protocol = generateProtocol(counter.value, "OS");
+            create: {
+              id: `CALL-${year}`,
+              type: ProtocolType.CALL,
+              year,
+              value: 1,
+            },
+          });
 
-        const call = await tx.call.create({
-          data: {
-            id: callId,
+          const protocol = generateProtocol(counter.value, "OS");
 
-            protocol,
+          const createdCallRecord = await tx.call.create({
+            data: {
+              id: callId,
 
-            title: callData.title,
+              protocol,
 
-            description: callData.description,
+              title: callData.title,
+              description: callData.description,
 
-            priority: callData.priority,
+              priority: callData.priority,
+              serviceType: callData.serviceType,
 
-            serviceType: callData.serviceType,
+              requiredLevel: DEFAULT_TECHNICIAN_LEVEL,
 
-            requiredLevel: DEFAULT_TECHNICIAN_LEVEL,
+              locationId: callData.locationId,
 
-            locationId: callData.locationId,
+              openedById: userId,
 
-            openedById: userId,
+              assignedToId: null,
 
-            assignedToId: null,
+              status: requiresPlanning ? "PLANNING" : "OPEN",
+            },
 
-            status: requiresPlanning ? "PLANNING" : "OPEN",
-          },
+            select: {
+              id: true,
+            },
+          });
 
-          select: {
-            id: true,
-          },
-        });
+          await tx.callArea.createMany({
+            data: callData.areaIds.map((areaId) => ({
+              callId: createdCallRecord.id,
 
-        await tx.callArea.createMany({
-          data: callData.areaIds.map((areaId) => ({
-            callId: call.id,
-            areaId,
-          })),
-        });
-
-        if (uploadedAttachments.length > 0) {
-          await tx.callAttachment.createMany({
-            data: uploadedAttachments.map((attachment) => ({
-              callId: call.id,
-
-              uploadedById: userId,
-
-              fileName: attachment.fileName,
-
-              storageKey: attachment.storageKey,
-
-              mimeType: attachment.mimeType,
-
-              type: "BEFORE",
+              areaId,
             })),
           });
-        }
 
-        const planning = requiresPlanning
-          ? await tx.callPlanning.create({
-              data: {
-                callId: call.id,
+          if (uploadedAttachments.length > 0) {
+            await tx.callAttachment.createMany({
+              data: uploadedAttachments.map((attachment) => ({
+                callId: createdCallRecord.id,
 
-                createdById: userId,
+                uploadedById: userId,
 
-                status: "DRAFT",
-              },
+                fileName: attachment.fileName,
 
-              select: {
-                id: true,
-                status: true,
-                createdAt: true,
-              },
-            })
-          : null;
+                storageKey: attachment.storageKey,
 
-        await tx.callHistory.create({
-          data: {
-            callId: call.id,
+                mimeType: attachment.mimeType,
 
-            userId,
+                type: "BEFORE",
+              })),
+            });
+          }
 
-            action: "CREATED",
+          const planning = requiresPlanning
+            ? await tx.callPlanning.create({
+                data: {
+                  callId: createdCallRecord.id,
 
-            observation: "Chamado criado.",
-          },
-        });
+                  createdById: userId,
 
-        if (requiresPlanning) {
+                  status: "DRAFT",
+                },
+
+                select: {
+                  id: true,
+                  status: true,
+                  createdAt: true,
+                },
+              })
+            : null;
+
           await tx.callHistory.create({
             data: {
-              callId: call.id,
+              callId: createdCallRecord.id,
 
               userId,
 
-              action: "PLANNING_STARTED",
+              action: "CREATED",
 
-              observation: "Planejamento do chamado iniciado.",
+              observation: "Chamado criado.",
             },
           });
-        }
 
-        return {
-          id: call.id,
-          planning,
-        };
-      });
+          if (requiresPlanning) {
+            await tx.callHistory.create({
+              data: {
+                callId: createdCallRecord.id,
+
+                userId,
+
+                action: "PLANNING_STARTED",
+
+                observation: "Planejamento do chamado iniciado.",
+              },
+            });
+          }
+
+          return {
+            id: createdCallRecord.id,
+            planning,
+          };
+        },
+      );
 
       const call = await prisma.call.findUnique({
         where: {
@@ -536,6 +552,17 @@ export class CallService {
           requiredLevel: true,
           description: true,
 
+          attachments: {
+            select: {
+              id: true,
+              fileName: true,
+              storageKey: true,
+              mimeType: true,
+              type: true,
+              createdAt: true,
+            },
+          },
+
           callAreas: {
             select: {
               area: {
@@ -590,7 +617,6 @@ export class CallService {
             },
           },
         },
-
         orderBy: {
           createdAt: "desc",
         },
@@ -604,11 +630,30 @@ export class CallService {
       }),
     ]);
 
-    const formattedCalls = calls.map((call) => ({
-      ...call,
+    const formattedCalls = await Promise.all(
+      calls.map(async (call) => {
+        const attachments = await Promise.all(
+          call.attachments.map(async (attachment) => {
+            const url = await generateR2ReadUrl({
+              key: attachment.storageKey,
+            });
 
-      assistants: call.assistants.map((assistant) => assistant.technician),
-    }));
+            return {
+              ...attachment,
+              url,
+            };
+          }),
+        );
+
+        return {
+          ...call,
+
+          assistants: call.assistants.map((assistant) => assistant.technician),
+
+          attachments,
+        };
+      }),
+    );
 
     return {
       calls: formattedCalls,
@@ -649,6 +694,17 @@ export class CallService {
 
       createdAt: true,
       updatedAt: true,
+
+      attachments: {
+        select: {
+          id: true,
+          fileName: true,
+          storageKey: true,
+          mimeType: true,
+          type: true,
+          createdAt: true,
+        },
+      },
 
       location: {
         select: {
@@ -812,7 +868,7 @@ export class CallService {
      */
     const currentService = inProgressService ?? readyService;
 
-    const formatCall = (
+    const formatCall = async (
       call:
         | typeof currentService
         | (typeof pausedServices)[number]
@@ -827,6 +883,19 @@ export class CallService {
         call.assignedTo?.id === technicianId
           ? ("RESPONSIBLE" as const)
           : ("ASSISTANT" as const);
+
+      const attachments = await Promise.all(
+        call.attachments.map(async (attachment) => {
+          const url = await generateR2ReadUrl({
+            key: attachment.storageKey,
+          });
+
+          return {
+            ...attachment,
+            url,
+          };
+        }),
+      );
 
       return {
         id: call.id,
@@ -849,21 +918,33 @@ export class CallService {
 
         assistants: call.assistants.map((assistant) => assistant.technician),
 
+        attachments,
+
         createdAt: call.createdAt,
         updatedAt: call.updatedAt,
       };
     };
 
+    const [
+      formattedCurrentService,
+      formattedPausedServices,
+      formattedCompletedServices,
+    ] = await Promise.all([
+      formatCall(currentService),
+
+      Promise.all(pausedServices.map((call) => formatCall(call))),
+
+      Promise.all(completedServices.map((call) => formatCall(call))),
+    ]);
+
     return {
-      currentService: formatCall(currentService),
+      currentService: formattedCurrentService,
 
-      pausedServices: pausedServices
-        .map((call) => formatCall(call))
-        .filter((call) => call !== null),
+      pausedServices: formattedPausedServices.filter((call) => call !== null),
 
-      completedServices: completedServices
-        .map((call) => formatCall(call))
-        .filter((call) => call !== null),
+      completedServices: formattedCompletedServices.filter(
+        (call) => call !== null,
+      ),
 
       counts: {
         current: currentService ? 1 : 0,
