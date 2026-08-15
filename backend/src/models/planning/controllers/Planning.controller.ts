@@ -39,7 +39,6 @@ export class PlanningController {
       planning,
     });
   };
-
   confirmPlanning = async (req: Request, res: Response) => {
     const { callId } = req.params;
 
@@ -61,14 +60,28 @@ export class PlanningController {
     );
 
     /*
-     * Atualiza em tempo real as telas que
-     * estejam acompanhando os chamados.
+     * Atualiza em tempo real as telas
+     * que acompanham os chamados.
      */
     io.emit("call_updated", result.call);
 
     /*
-     * Evento específico caso futuramente
-     * queira tratar confirmação de planejamento.
+     * Avisa que a disponibilidade dos técnicos mudou.
+     *
+     * Nesse momento o responsável e os auxiliares
+     * passaram a fazer parte de um chamado READY,
+     * então ficam ocupados.
+     */
+    io.emit("technician_availability_changed", {
+      technicianIds: [
+        result.call.assignedTo?.id,
+        ...result.call.assistants.map((assistant) => assistant.id),
+      ].filter((id): id is string => Boolean(id)),
+    });
+
+    /*
+     * Evento específico da confirmação
+     * do planejamento.
      */
     io.emit("planning_confirmed", {
       callId: result.call.id,

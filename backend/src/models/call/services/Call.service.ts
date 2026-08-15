@@ -1104,26 +1104,85 @@ export class CallService {
       throw new AppError(403, "Você não pertence à área deste chamado.");
     }
 
-    const activeCall = await prisma.call.findFirst({
+    /*
+     * Verifica se o técnico já está ocupado
+     * como responsável em outro atendimento ativo.
+     */
+    const responsibleActiveCall = await prisma.call.findFirst({
       where: {
         assignedToId: technicianId,
-        status: "IN_PROGRESS",
+
+        status: {
+          in: [
+            "OPEN",
+            "READY",
+            "IN_PROGRESS",
+            "WAITING_PARTS",
+            "HELP_REQUESTED",
+          ],
+        },
       },
 
       select: {
         id: true,
         protocol: true,
+        status: true,
       },
     });
 
-    if (activeCall) {
+    if (responsibleActiveCall) {
       throw new AppError(
         409,
-        `Você já possui um atendimento em andamento: ${activeCall.protocol}.`,
+        `Você já está vinculado ao atendimento ${responsibleActiveCall.protocol}.`,
       );
     }
 
-    const updatedCall = await prisma.$transaction(async (tx) => {
+    /*
+     * Também verifica se o técnico está ocupado
+     * como auxiliar em outro chamado ativo.
+     */
+    const assistantActiveCall = await prisma.call.findFirst({
+      where: {
+        assistants: {
+          some: {
+            technicianId,
+          },
+        },
+
+        status: {
+          in: [
+            "OPEN",
+            "READY",
+            "IN_PROGRESS",
+            "WAITING_PARTS",
+            "HELP_REQUESTED",
+          ],
+        },
+      },
+
+      select: {
+        id: true,
+        protocol: true,
+        status: true,
+      },
+    });
+
+    if (assistantActiveCall) {
+      throw new AppError(
+        409,
+        `Você já participa do atendimento ${assistantActiveCall.protocol}.`,
+      );
+    }
+
+    /*
+     * A transaction protege apenas a parte que
+     * realmente precisa ser atômica:
+     *
+     * OPEN -> IN_PROGRESS
+     * +
+     * criação do histórico.
+     */
+    await prisma.$transaction(async (tx) => {
       const result = await tx.call.updateMany({
         where: {
           id: callId,
@@ -1152,69 +1211,74 @@ export class CallService {
           observation: `${technician.name} assumiu e iniciou o atendimento.`,
         },
       });
-
-      const updatedCall = await tx.call.findUnique({
-        where: {
-          id: callId,
-        },
-
-        select: {
-          id: true,
-          protocol: true,
-          title: true,
-          status: true,
-          priority: true,
-          serviceType: true,
-          requiredLevel: true,
-          description: true,
-          createdAt: true,
-          updatedAt: true,
-
-          assignedTo: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              level: true,
-            },
-          },
-
-          callAreas: {
-            select: {
-              area: {
-                select: {
-                  id: true,
-                  name: true,
-                },
-              },
-            },
-          },
-
-          location: {
-            select: {
-              id: true,
-              name: true,
-
-              parent: {
-                select: {
-                  id: true,
-                  name: true,
-                },
-              },
-            },
-          },
-        },
-      });
-
-      if (!updatedCall) {
-        throw new AppError(
-          500,
-          "Chamado assumido, mas não foi possível carregar os dados.",
-        );
-      }
-
-      return updatedCall;
     });
+
+    /*
+     * A transaction já foi finalizada.
+     *
+     * Agora carregamos o chamado completo fora dela,
+     * evitando aquela consulta relacional dentro
+     * da PgTransaction que estava gerando o warning.
+     */
+    const updatedCall = await prisma.call.findUnique({
+      where: {
+        id: callId,
+      },
+
+      select: {
+        id: true,
+        protocol: true,
+        title: true,
+        status: true,
+        priority: true,
+        serviceType: true,
+        requiredLevel: true,
+        description: true,
+        createdAt: true,
+        updatedAt: true,
+
+        assignedTo: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            level: true,
+          },
+        },
+
+        callAreas: {
+          select: {
+            area: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+
+        location: {
+          select: {
+            id: true,
+            name: true,
+
+            parent: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!updatedCall) {
+      throw new AppError(
+        500,
+        "Chamado assumido, mas não foi possível carregar os dados.",
+      );
+    }
 
     return updatedCall;
   };

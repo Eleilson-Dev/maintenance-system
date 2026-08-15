@@ -9,6 +9,7 @@ import {
   PlanningParamsDTO,
   UpdatePlanningTeamDTO,
 } from "../schemas/Planning.schema.js";
+import { generateR2ReadUrl } from "../../../config/storage/r2Storage.js";
 
 @injectable()
 export class PlanningService {
@@ -815,6 +816,21 @@ export class PlanningService {
             status: true,
             priority: true,
             serviceType: true,
+            protocol: true,
+
+            location: {
+              select: {
+                id: true,
+                name: true,
+
+                parent: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
+              },
+            },
 
             callAreas: {
               select: {
@@ -905,6 +921,8 @@ export class PlanningService {
           status: planning.call.status,
           priority: planning.call.priority,
           serviceType: planning.call.serviceType,
+          protocol: planning.call.protocol,
+          location: planning.call.location,
 
           areas: planning.call.callAreas.map((callArea) => callArea.area),
         },
@@ -986,6 +1004,17 @@ export class PlanningService {
             openedById: true,
             createdAt: true,
             updatedAt: true,
+
+            attachments: {
+              select: {
+                id: true,
+                fileName: true,
+                storageKey: true,
+                mimeType: true,
+                type: true,
+                createdAt: true,
+              },
+            },
 
             location: {
               select: {
@@ -1267,6 +1296,19 @@ export class PlanningService {
       (member) => member.role === "ASSISTANT",
     );
 
+    const attachments = await Promise.all(
+      planning.call.attachments.map(async (attachment) => {
+        const url = await generateR2ReadUrl({
+          key: attachment.storageKey,
+        });
+
+        return {
+          ...attachment,
+          url,
+        };
+      }),
+    );
+
     return {
       id: planning.id,
       status: planning.status,
@@ -1295,7 +1337,7 @@ export class PlanningService {
         serviceType: planning.call.serviceType,
 
         location: planning.call.location,
-
+        attachments,
         areas: planning.call.callAreas.map((callArea) => callArea.area),
 
         createdAt: planning.call.createdAt,
