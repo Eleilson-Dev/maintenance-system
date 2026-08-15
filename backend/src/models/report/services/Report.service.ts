@@ -1,23 +1,17 @@
 import { injectable } from "tsyringe";
+
 import { prisma } from "../../../config/db/database.js";
+
 import { AppError } from "../../../shared/errors/AppError.js";
+
 import type { CompleteCallDTO } from "../schemas/Report.schema.js";
-
-type ReportAttachmentInput = {
-  fileName: string;
-  fileUrl: string;
-};
-
-type CompleteCallInput = CompleteCallDTO & {
-  attachments?: ReportAttachmentInput[];
-};
 
 @injectable()
 export class ReportService {
   completeCall = async (
     callId: string,
     technicianId: string,
-    data: CompleteCallInput,
+    data: CompleteCallDTO,
   ) => {
     const call = await prisma.call.findUnique({
       where: {
@@ -77,8 +71,6 @@ export class ReportService {
 
     const finishedAt = new Date();
 
-    const attachments = data.attachments ?? [];
-
     const completedCall = await prisma.$transaction(async (tx) => {
       const report = await tx.report.create({
         data: {
@@ -97,10 +89,15 @@ export class ReportService {
 
         select: {
           id: true,
+
           serviceDone: true,
+
           partChanged: true,
+
           partName: true,
+
           observations: true,
+
           createdAt: true,
 
           createdBy: {
@@ -113,28 +110,6 @@ export class ReportService {
       });
 
       /*
-       * Deixado preparado para quando o upload
-       * das imagens for implementado.
-       *
-       * As imagens da finalização serão salvas
-       * como CallAttachment com type AFTER.
-       */
-      if (attachments.length > 0) {
-        await tx.callAttachment.createMany({
-          data: attachments.map((attachment) => ({
-            callId: call.id,
-
-            uploadedById: technicianId,
-
-            fileName: attachment.fileName,
-            fileUrl: attachment.fileUrl,
-
-            type: "AFTER",
-          })),
-        });
-      }
-
-      /*
        * Encerra todos os WorkLogs ainda abertos
        * deste atendimento.
        *
@@ -144,6 +119,7 @@ export class ReportService {
       await tx.workLog.updateMany({
         where: {
           callId: call.id,
+
           endTime: null,
         },
 
@@ -159,14 +135,19 @@ export class ReportService {
 
         data: {
           status: "COMPLETED",
+
           finishedAt,
         },
 
         select: {
           id: true,
+
           protocol: true,
+
           status: true,
+
           finishedAt: true,
+
           updatedAt: true,
         },
       });
@@ -183,7 +164,9 @@ export class ReportService {
 
           metadata: {
             reportId: report.id,
-            attachmentsCount: attachments.length,
+
+            attachmentsCount: 0,
+
             partChanged: data.partChanged,
           },
         },
@@ -191,6 +174,7 @@ export class ReportService {
 
       return {
         ...updatedCall,
+
         report,
       };
     });
