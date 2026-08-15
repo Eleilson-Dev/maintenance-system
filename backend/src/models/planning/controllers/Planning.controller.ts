@@ -39,6 +39,7 @@ export class PlanningController {
       planning,
     });
   };
+
   confirmPlanning = async (req: Request, res: Response) => {
     const { callId } = req.params;
 
@@ -66,22 +67,20 @@ export class PlanningController {
     io.emit("call_updated", result.call);
 
     /*
-     * Avisa que a disponibilidade dos técnicos mudou.
-     *
-     * Nesse momento o responsável e os auxiliares
-     * passaram a fazer parte de um chamado READY,
-     * então ficam ocupados.
+     * Atualiza disponibilidade dos técnicos.
      */
+    const technicianIds = [
+      result.call.assignedTo?.id,
+      ...result.call.assistants.map((assistant) => assistant.id),
+    ].filter((id): id is string => Boolean(id));
+
     io.emit("technician_availability_changed", {
-      technicianIds: [
-        result.call.assignedTo?.id,
-        ...result.call.assistants.map((assistant) => assistant.id),
-      ].filter((id): id is string => Boolean(id)),
+      technicianIds,
     });
 
     /*
-     * Evento específico da confirmação
-     * do planejamento.
+     * Evento global de confirmação.
+     * Pode continuar existindo para sincronização das telas.
      */
     io.emit("planning_confirmed", {
       callId: result.call.id,
@@ -90,6 +89,34 @@ export class PlanningController {
       call: result.call,
       planning: result.planning,
     });
+
+    /*
+     * =====================================================
+     * NOTIFICAÇÕES INDIVIDUAIS
+     * =====================================================
+     */
+
+    const responsibleId = result.call.assignedTo?.id;
+
+    if (responsibleId) {
+      io.to(`user:${responsibleId}`).emit("user_notification", {
+        type: "ASSIGNED_RESPONSIBLE",
+        callId: result.call.id,
+        protocol: result.call.protocol,
+        title: result.call.title,
+        message: "Você foi atribuído como responsável em um chamado.",
+      });
+    }
+
+    for (const assistant of result.call.assistants) {
+      io.to(`user:${assistant.id}`).emit("user_notification", {
+        type: "ASSIGNED_ASSISTANT",
+        callId: result.call.id,
+        protocol: result.call.protocol,
+        title: result.call.title,
+        message: "Você foi atribuído como auxiliar em um chamado.",
+      });
+    }
 
     return res.status(200).json({
       message: "Planejamento confirmado com sucesso.",
