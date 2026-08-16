@@ -14,9 +14,22 @@ export const io = new Server(server, {
 io.on("connection", (socket) => {
   console.log(`Cliente conectado: ${socket.id}`);
 
+  const userId = socket.handshake.auth?.userId;
+
+  if (typeof userId === "string" && userId.trim()) {
+    const userRoom = `user:${userId}`;
+
+    socket.join(userRoom);
+
+    console.log(`Usuário ${userId} entrou na sala individual ${userRoom}`);
+  } else {
+    console.log(`Socket ${socket.id} conectou sem userId válido.`);
+  }
+
   socket.on("join_support", () => {
     socket.join("support_agents");
-    console.log("Entrou na sala support_agents");
+
+    console.log(`Socket ${socket.id} entrou na sala support_agents`);
   });
 
   socket.on("disconnect", () => {
