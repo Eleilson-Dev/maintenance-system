@@ -38,6 +38,10 @@ callRouter.get("/calls/list", VerifyToken.execute, (req, res) =>
   callController.getCalls(req, res),
 );
 
+callRouter.get("/call/:callId", VerifyToken.execute, (req, res) =>
+  callController.getCallById(req, res),
+);
+
 callRouter.get("/call/technician/services", VerifyToken.execute, (req, res) =>
   callController.listTechnicianServices(req, res),
 );

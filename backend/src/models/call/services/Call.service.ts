@@ -664,6 +664,158 @@ export class CallService {
     };
   };
 
+  getCallById = async (callId: string) => {
+    const call = await prisma.call.findUnique({
+      where: {
+        id: callId,
+      },
+
+      select: {
+        id: true,
+        protocol: true,
+        title: true,
+        description: true,
+
+        status: true,
+        priority: true,
+        serviceType: true,
+        requiredLevel: true,
+
+        createdAt: true,
+        updatedAt: true,
+        finishedAt: true,
+
+        location: {
+          select: {
+            id: true,
+            name: true,
+
+            parent: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+
+        callAreas: {
+          select: {
+            area: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+
+        openedBy: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+
+        assignedTo: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            level: true,
+          },
+        },
+
+        assistants: {
+          select: {
+            technician: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                level: true,
+              },
+            },
+          },
+        },
+
+        attachments: {
+          select: {
+            id: true,
+            fileName: true,
+            storageKey: true,
+            mimeType: true,
+            type: true,
+            createdAt: true,
+          },
+        },
+
+        report: {
+          select: {
+            id: true,
+            serviceDone: true,
+            partChanged: true,
+            partName: true,
+            observations: true,
+            createdAt: true,
+
+            createdBy: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+
+        history: {
+          select: {
+            id: true,
+            action: true,
+            observation: true,
+            createdAt: true,
+
+            user: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+
+          orderBy: {
+            createdAt: "asc",
+          },
+        },
+      },
+    });
+
+    if (!call) {
+      throw new AppError(404, "Chamado não encontrado.");
+    }
+
+    const attachments = await Promise.all(
+      call.attachments.map(async (attachment) => {
+        const url = await generateR2ReadUrl({
+          key: attachment.storageKey,
+        });
+
+        return {
+          ...attachment,
+          url,
+        };
+      }),
+    );
+
+    return {
+      ...call,
+
+      assistants: call.assistants.map((assistant) => assistant.technician),
+
+      attachments,
+    };
+  };
+
   listTechnicianServices = async (technicianId: string) => {
     const participationWhere: Prisma.CallWhereInput = {
       OR: [

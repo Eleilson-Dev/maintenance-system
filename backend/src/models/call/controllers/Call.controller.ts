@@ -88,6 +88,14 @@ export class CallController {
     return res.status(200).json(calls);
   };
 
+  getCallById = async (req: Request, res: Response) => {
+    const callId = req.params.callId as string;
+
+    const call = await this.callService.getCallById(callId);
+
+    return res.status(200).json(call);
+  };
+
   listTechnicianServices = async (req: Request, res: Response) => {
     const technicianId = res.locals.user.id as string;
 
