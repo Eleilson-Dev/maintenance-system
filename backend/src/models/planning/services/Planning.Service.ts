@@ -309,12 +309,27 @@ export class PlanningService {
         where: {
           id: callId,
         },
+
         select: {
           id: true,
           title: true,
           protocol: true,
           status: true,
           openedById: true,
+
+          location: {
+            select: {
+              id: true,
+              name: true,
+
+              parent: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
 
           callAreas: {
             select: {
@@ -593,15 +608,31 @@ export class PlanningService {
         where: {
           id: callId,
         },
+
         data: {
           assignedToId: responsibleMember.technicianId,
           status: "READY",
         },
+
         select: {
           id: true,
           title: true,
           protocol: true,
           status: true,
+
+          location: {
+            select: {
+              id: true,
+              name: true,
+
+              parent: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
 
           assignedTo: {
             select: {

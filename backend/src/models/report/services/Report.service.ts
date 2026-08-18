@@ -26,6 +26,20 @@ export class ReportService {
         assignedToId: true,
         openedById: true,
 
+        location: {
+          select: {
+            id: true,
+            name: true,
+
+            parent: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+
         report: {
           select: {
             id: true,
@@ -170,6 +184,7 @@ export class ReportService {
 
       title: call.title,
       openedById: call.openedById,
+      location: call.location,
     };
   };
 }

@@ -71,6 +71,7 @@ export class PlanningController {
      */
     const technicianIds = [
       result.call.assignedTo?.id,
+
       ...result.call.assistants.map((assistant) => assistant.id),
     ].filter((id): id is string => Boolean(id));
 
@@ -80,7 +81,6 @@ export class PlanningController {
 
     /*
      * Evento global de confirmação.
-     * Pode continuar existindo para sincronização das telas.
      */
     io.emit("planning_confirmed", {
       callId: result.call.id,
@@ -89,6 +89,15 @@ export class PlanningController {
       call: result.call,
       planning: result.planning,
     });
+
+    /*
+     * =====================================================
+     * LOCALIZAÇÃO
+     * =====================================================
+     */
+    const location = result.call.location?.parent?.name
+      ? `${result.call.location.parent.name} / ${result.call.location.name}`
+      : result.call.location?.name;
 
     /*
      * =====================================================
@@ -101,20 +110,28 @@ export class PlanningController {
     if (responsibleId) {
       io.to(`user:${responsibleId}`).emit("user_notification", {
         type: "ASSIGNED_RESPONSIBLE",
+
         callId: result.call.id,
         protocol: result.call.protocol,
         title: result.call.title,
+
         message: "Você foi atribuído como responsável em um chamado.",
+
+        location,
       });
     }
 
     for (const assistant of result.call.assistants) {
       io.to(`user:${assistant.id}`).emit("user_notification", {
         type: "ASSIGNED_ASSISTANT",
+
         callId: result.call.id,
         protocol: result.call.protocol,
         title: result.call.title,
+
         message: "Você foi atribuído como auxiliar em um chamado.",
+
+        location,
       });
     }
 
@@ -124,7 +141,6 @@ export class PlanningController {
       ...result,
     });
   };
-
   listAllPlannings = async (req: Request, res: Response) => {
     const query = listPlanningsQuerySchema.parse(req.query);
 

@@ -37,9 +37,16 @@ export class ReportController {
      */
     io.to(`user:${completedCall.openedById}`).emit("user_notification", {
       type: "CALL_COMPLETED",
+
       callId: completedCall.id,
       protocol: completedCall.protocol,
-      message: "O chamado que você solicitou foi finalizado",
+      title: completedCall.title,
+
+      message: "O chamado solicitado foi finalizado",
+
+      location: completedCall.location?.parent?.name
+        ? `${completedCall.location.parent.name} / ${completedCall.location.name}`
+        : completedCall.location?.name,
     });
 
     return res.status(200).json(completedCall);
