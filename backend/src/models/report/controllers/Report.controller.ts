@@ -20,18 +20,27 @@ export class ReportController {
       technicianId,
       {
         ...req.body,
-
-        /*
-         * Quando implementarmos upload,
-         * os arquivos serão convertidos aqui.
-         *
-         * Por enquanto nenhuma imagem é enviada.
-         */
         attachments: [],
       },
     );
 
+    /**
+     * Atualização global.
+     *
+     * Serve para atualizar listas, atendimento atual,
+     * disponibilidade dos técnicos etc.
+     */
     io.emit("call_updated", completedCall);
+
+    /**
+     * Notificação somente para quem criou o chamado.
+     */
+    io.to(`user:${completedCall.openedById}`).emit("user_notification", {
+      type: "CALL_COMPLETED",
+      callId: completedCall.id,
+      protocol: completedCall.protocol,
+      message: "O chamado que você solicitou foi finalizado",
+    });
 
     return res.status(200).json(completedCall);
   };

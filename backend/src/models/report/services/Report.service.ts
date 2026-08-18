@@ -21,8 +21,10 @@ export class ReportService {
       select: {
         id: true,
         protocol: true,
+        title: true,
         status: true,
         assignedToId: true,
+        openedById: true,
 
         report: {
           select: {
@@ -109,17 +111,9 @@ export class ReportService {
         },
       });
 
-      /*
-       * Encerra todos os WorkLogs ainda abertos
-       * deste atendimento.
-       *
-       * Isso libera tanto o responsável quanto
-       * possíveis auxiliares.
-       */
       await tx.workLog.updateMany({
         where: {
           callId: call.id,
-
           endTime: null,
         },
 
@@ -135,19 +129,14 @@ export class ReportService {
 
         data: {
           status: "COMPLETED",
-
           finishedAt,
         },
 
         select: {
           id: true,
-
           protocol: true,
-
           status: true,
-
           finishedAt: true,
-
           updatedAt: true,
         },
       });
@@ -164,9 +153,7 @@ export class ReportService {
 
           metadata: {
             reportId: report.id,
-
             attachmentsCount: 0,
-
             partChanged: data.partChanged,
           },
         },
@@ -174,11 +161,15 @@ export class ReportService {
 
       return {
         ...updatedCall,
-
         report,
       };
     });
 
-    return completedCall;
+    return {
+      ...completedCall,
+
+      title: call.title,
+      openedById: call.openedById,
+    };
   };
 }

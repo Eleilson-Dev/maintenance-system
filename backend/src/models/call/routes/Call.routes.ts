@@ -33,6 +33,7 @@ callRouter.post(
   CallImagesUpload,
   (req, res) => callController.createAdminCall(req, res),
 );
+
 callRouter.get("/calls/list", VerifyToken.execute, (req, res) =>
   callController.getCalls(req, res),
 );
